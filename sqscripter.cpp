@@ -8,11 +8,13 @@
 
 
 
-static void CmdExec(const char *buf){
+static void (*CmdProc)(const char *buf) = NULL;
+static void ScriptDlgPrint(const char*);
+
+void scripter_init(void commandProc(const char*), void (**printProc)(const char*)){
+	CmdProc = commandProc;
+	*printProc = ScriptDlgPrint;
 }
-
-static void (*CmdPrintHandler)(const char *line);
-
 
 /// Window handle for the scripting window.
 static HWND hwndScriptDlg = NULL;
@@ -61,7 +63,7 @@ static INT_PTR CALLBACK ScriptCommandProc(HWND hWnd, UINT message, WPARAM wParam
 			size_t buflen = GetWindowTextLengthA(hWnd);
 			char *buf = (char*)malloc(buflen+1);
 			GetWindowTextA(hWnd, buf, buflen+1);
-			CmdExec(buf);
+			CmdProc(buf);
 			// Remember issued command in the history buffer only if the command is not repeated.
 			if(cmdHistory.empty() || strcmp(cmdHistory.back(), buf)){
 				cmdHistory.push_back(buf);
@@ -104,7 +106,6 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 	static HWND hwndScintilla = NULL;
 	switch(message){
 	case WM_INITDIALOG:
-		CmdPrintHandler = ScriptDlgPrint;
 		defEditWndProc = (WNDPROC)GetWindowLongPtr(GetDlgItem(hDlg, IDC_COMMAND), GWLP_WNDPROC);
 		SetWindowLongPtr(GetDlgItem(hDlg, IDC_COMMAND), GWLP_WNDPROC, (LONG_PTR)ScriptCommandProc);
 		if(hSciLexer){
