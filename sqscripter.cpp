@@ -56,7 +56,7 @@ static HMODULE hSciLexer = NULL;
 ///
 /// Handles enter key and up/down arrow keys to constomize behavior of default edit control.
 static INT_PTR CALLBACK ScriptCommandProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam){
-	ScripterWindowImpl *p = (ScripterWindowImpl*)GetWindowLongPtr(hWnd, GWL_USERDATA);
+	ScripterWindowImpl *p = (ScripterWindowImpl*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
 	return p->ScriptCommandProc(hWnd, message, wParam, lParam);
 }
 
@@ -123,17 +123,17 @@ INT_PTR ScripterWindowImpl::ScriptCommandProc(HWND hWnd, UINT message, WPARAM wP
 
 /// Dialog handler for scripting window
 static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam){
-	ScripterWindowImpl *p = (ScripterWindowImpl*)GetWindowLongPtr(hDlg, GWL_USERDATA);
+	ScripterWindowImpl *p = (ScripterWindowImpl*)GetWindowLongPtr(hDlg, GWLP_USERDATA);
 	static HWND hwndScintilla = NULL;
 	switch(message){
 	case WM_INITDIALOG:
-		SetWindowLongPtr(hDlg, GWL_USERDATA, (LONG_PTR)lParam);
+		SetWindowLongPtr(hDlg, GWLP_USERDATA, (LONG_PTR)lParam);
 		p = (ScripterWindowImpl*)lParam;
 		{
 			HWND hCommand = GetDlgItem(hDlg, IDC_COMMAND);
 			p->defEditWndProc = (WNDPROC)GetWindowLongPtr(hCommand, GWLP_WNDPROC);
 			SetWindowLongPtr(hCommand, GWLP_WNDPROC, (LONG_PTR)ScriptCommandProc);
-			SetWindowLongPtr(hCommand, GWL_USERDATA, (LONG_PTR)lParam);
+			SetWindowLongPtr(hCommand, GWLP_USERDATA, (LONG_PTR)lParam);
 		}
 		if(hSciLexer){
 			HWND hScriptEdit = GetDlgItem(hDlg, IDC_SCRIPTEDIT);
