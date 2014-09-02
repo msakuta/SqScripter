@@ -237,7 +237,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 }
 
 /// Toggle scripting window
-int cmd_scripter(){
+int scripter_show(){
 	if(!hSciLexer){
 		hSciLexer = LoadLibrary("SciLexer.DLL");
 		if(hSciLexer == NULL){

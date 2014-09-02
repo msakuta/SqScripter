@@ -22,11 +22,18 @@
 #include <string>
 #include <vector>
 
+static void (*PrintProc)(const char *) = NULL;
+
+void CmdProc(const char *cmd){
+	MessageBox(NULL, cmd, "Command Executed", MB_ICONERROR);
+	PrintProc((std::string("Echo: ") + cmd).c_str());
+}
 
 int main(int argc, char *argv[])
 {
+	scripter_init(CmdProc, &PrintProc);
 
-	cmd_scripter();
+	scripter_show();
 
 
 	do{
