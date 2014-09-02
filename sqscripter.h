@@ -11,6 +11,7 @@ struct ScripterWindow;
 struct ScripterConfig{
 	void (*commandProc)(const char*);
 	void (**printProc)(ScripterWindow *, const char*);
+	void (*runProc)(const char *fileName, const char *content);
 	const char *sourceFilters;
 };
 

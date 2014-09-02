@@ -31,12 +31,18 @@ void CmdProc(const char *cmd){
 	PrintProc(sw, (std::string("Echo: ") + cmd).c_str());
 }
 
+static void RunProc(const char *fileName, const char *content){
+	MessageBox(NULL, (std::string("Source file run: ") + fileName).c_str(), "Source File Run", MB_ICONINFORMATION);
+	PrintProc(sw, (std::string("Content: \r\n") + content).c_str());
+}
+
 int main(int argc, char *argv[])
 {
 	const char *filters = "All (*.*)\0*.*\0Squirrel Scripts (*.nut)\0*.nut";
 	ScripterConfig sc;
 	sc.commandProc = CmdProc;
 	sc.printProc = &PrintProc;
+	sc.runProc = RunProc;
 	sc.sourceFilters = filters;
 
 	sw = scripter_init(&sc);

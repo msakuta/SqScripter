@@ -18,6 +18,8 @@ struct ScripterWindowImpl : ScripterWindow{
 	std::vector<char*> cmdHistory;
 	int currentHistory;
 
+	std::string fileName;
+
 	void print(const char *line);
 
 	INT_PTR ScriptCommandProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
@@ -197,6 +199,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 				SendMessageW(hEdit, WM_GETTEXT, buflen, (LPARAM)wbuf);
 				// Squirrel is not compiled with unicode, so we must convert text into utf-8, which is ascii transparent.
 				::WideCharToMultiByte(CP_UTF8, 0, wbuf, buflen, buf, buflen * 3, NULL, NULL);
+				p->config.runProc(p->fileName.c_str(), buf);
 /*				HSQUIRRELVM v = application.clientGame->sqvm;
 				if(SQ_FAILED(sq_compilebuffer(v, buf, strlen(buf), "buf", SQTrue))){
 					free(buf);
@@ -258,6 +261,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 						CloseHandle(hFile);
 						free(text);
 						free(wtext);
+						p->fileName = ofn.lpstrFile;
 					}
 				}
 			}
