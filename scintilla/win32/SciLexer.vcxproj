@@ -119,6 +119,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\sqscripter.cpp" />
     <ClCompile Include="..\lexers\*.cxx" />
     <ClCompile Include="..\lexlib\*.cxx" />
     <ClCompile Include="..\src\*.cxx" />
@@ -126,12 +127,14 @@
     <ClCompile Include="..\win32\ScintillaWin.cxx" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\sqscripter.h" />
     <ClInclude Include="..\include\*.h" />
     <ClInclude Include="..\src\*.h" />
     <ClInclude Include="..\lexlib\*.h" />
     <ClInclude Include="..\win32\*.h" />
   </ItemGroup>
   <ItemGroup>
+    <ResourceCompile Include="..\..\sqscripter.rc" />
     <ResourceCompile Include="..\win32\ScintRes.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

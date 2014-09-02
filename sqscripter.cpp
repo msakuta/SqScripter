@@ -44,11 +44,11 @@ ScripterWindow *scripter_init(const ScripterConfig *sc){
 void ScripterWindowImpl::print(const char *line){
 	if(IsWindow(hwndScriptDlg)){
 		HWND hEdit = GetDlgItem(hwndScriptDlg, IDC_CONSOLE);
-		size_t buflen = GetWindowTextLength(hEdit);
-		SendMessage(hEdit, EM_SETSEL, buflen, buflen);
+		size_t buflen = GetWindowTextLengthA(hEdit);
+		SendMessageA(hEdit, EM_SETSEL, buflen, buflen);
 		std::string s = line;
 		s += "\r\n";
-		SendMessage (hEdit, EM_REPLACESEL, 0, (LPARAM) s.c_str());
+		SendMessageA(hEdit, EM_REPLACESEL, 0, (LPARAM) s.c_str());
 	}
 }
 
@@ -218,12 +218,12 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 				return TRUE;
 			}
 			else if(id == IDC_CLEARCONSOLE){
-				SetDlgItemText(p->hwndScriptDlg, IDC_CONSOLE, "");
+				SetDlgItemText(p->hwndScriptDlg, IDC_CONSOLE, TEXT(""));
 				return TRUE;
 			}
 			else if(id == IDM_SCRIPT_OPEN){
 				static char fileBuf[MAX_PATH];
-				OPENFILENAME ofn = {
+				OPENFILENAMEA ofn = {
 					sizeof(OPENFILENAME), //  DWORD         lStructSize;
 					hDlg, //  HWND          hwndOwner;
 					NULL, // HINSTANCE     hInstance; ignored
@@ -245,7 +245,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 					NULL, // LPOFNHOOKPROC lpfnHook;
 					NULL, // LPCTSTR       lpTemplateName;
 				};
-				if(GetOpenFileName(&ofn)){
+				if(GetOpenFileNameA(&ofn)){
 					HANDLE hFile = CreateFileA(ofn.lpstrFile, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 					if(hFile){
 						DWORD textLen = GetFileSize(hFile, NULL);
@@ -274,18 +274,17 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 /// Toggle scripting window
 int scripter_show(ScripterWindow *sc){
 	if(!hSciLexer){
-		hSciLexer = LoadLibrary("SciLexer.DLL");
+		hSciLexer = LoadLibrary(TEXT("SciLexer.DLL"));
 		if(hSciLexer == NULL){
 			MessageBox(NULL,
-			"The Scintilla DLL could not be loaded.",
-			"Error loading Scintilla",
+			TEXT("The Scintilla DLL could not be loaded."),
+			TEXT("Error loading Scintilla"),
 			MB_OK | MB_ICONERROR);
 		}
 	}
-
 	ScripterWindowImpl *p = (ScripterWindowImpl*)sc;
 	if(!IsWindow(p->hwndScriptDlg)){
-		p->hwndScriptDlg = CreateDialogParam(GetModuleHandle(NULL), "ScriptWin", NULL, ScriptDlg, (LPARAM)p);
+		p->hwndScriptDlg = CreateDialogParam(hSciLexer, TEXT("ScriptWin"), NULL, ScriptDlg, (LPARAM)p);
 	}
 	else
 		ShowWindow(p->hwndScriptDlg, SW_SHOW);

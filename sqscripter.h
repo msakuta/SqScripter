@@ -5,6 +5,12 @@
 extern "C"{
 #endif
 
+#ifdef SCI_LEXER
+#define SCRIPTER_EXPORT __declspec(dllexport)
+#else
+#define SCRIPTER_EXPORT __declspec(dllimport)
+#endif
+
 struct ScripterWindow;
 
 /// \brief Parameter set for a scripter window
@@ -21,11 +27,11 @@ struct ScripterWindow{
 };
 
 /// \brief Initialize the scripter system with command and print procedures
-ScripterWindow *scripter_init(const ScripterConfig *);
+SCRIPTER_EXPORT ScripterWindow *scripter_init(const ScripterConfig *);
 
 
 /// \brief Show the scripter window
-int scripter_show(ScripterWindow *);
+SCRIPTER_EXPORT int scripter_show(ScripterWindow *);
 
 
 #ifdef __cplusplus
