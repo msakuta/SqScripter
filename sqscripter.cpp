@@ -1,4 +1,5 @@
 #include "sqscripter.h"
+#include "scintilla/include/Scintilla.h"
 
 #include <windows.h>
 #include "resource.h"
@@ -250,7 +251,10 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 						wchar_t *wtext = (wchar_t*)malloc((textLen+1) * sizeof(wchar_t));
 						text[textLen] = '\0';
 						::MultiByteToWideChar(CP_UTF8, 0, text, textLen, wtext, textLen);
-						SetWindowTextA(GetDlgItem(hDlg, IDC_SCRIPTEDIT), text);
+						// SetWindowTextA() seems to convert given string into unicode string prior to calling message handler.
+//						SetWindowTextA(GetDlgItem(hDlg, IDC_SCRIPTEDIT), text);
+						// SCI_SETTEXT seems to pass the pointer verbatum to the message handler.
+						SendMessageA(GetDlgItem(hDlg, IDC_SCRIPTEDIT), SCI_SETTEXT, 0, (LPARAM)text);
 						CloseHandle(hFile);
 						free(text);
 						free(wtext);
