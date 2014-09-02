@@ -82,7 +82,7 @@ INT_PTR ScripterWindowImpl::ScriptCommandProc(HWND hWnd, UINT message, WPARAM wP
 	case WM_KEYDOWN:
 		// Enter key issues command
 		if(wParam == VK_RETURN){
-			size_t buflen = GetWindowTextLengthA(hWnd);
+			int buflen = GetWindowTextLengthA(hWnd);
 			char *buf = (char*)malloc(buflen+1);
 			GetWindowTextA(hWnd, buf, buflen+1);
 			config.commandProc(buf);
@@ -105,9 +105,9 @@ INT_PTR ScripterWindowImpl::ScriptCommandProc(HWND hWnd, UINT message, WPARAM wP
 		if(wParam == VK_UP || wParam == VK_DOWN){
 			if(cmdHistory.size() != 0){
 				if(currentHistory == -1)
-					currentHistory = cmdHistory.size() - 1;
+					currentHistory = (int)cmdHistory.size() - 1;
 				else
-					currentHistory = (currentHistory + (wParam == VK_UP ? -1 : 1) + cmdHistory.size()) % cmdHistory.size();
+					currentHistory = (int)(currentHistory + (wParam == VK_UP ? -1 : 1) + cmdHistory.size()) % cmdHistory.size();
 				SetWindowTextA(hWnd, cmdHistory[currentHistory]);
 			}
 			return FALSE;
@@ -193,7 +193,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 			UINT id = LOWORD(wParam);
 			if(id == IDOK){
 				HWND hEdit = GetDlgItem(hDlg, IDC_SCRIPTEDIT);
-				size_t buflen = GetWindowTextLengthW(hEdit)+1;
+				int buflen = GetWindowTextLengthW(hEdit)+1;
 				char *buf = (char*)malloc(buflen * 3 * sizeof*buf);
 				wchar_t *wbuf = (wchar_t*)malloc(buflen * sizeof*wbuf);
 				SendMessageW(hEdit, WM_GETTEXT, buflen, (LPARAM)wbuf);
