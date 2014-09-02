@@ -6,21 +6,39 @@
 #include <string>
 #include <vector>
 
+struct ScripterWindowImpl : ScripterWindow{
+	/// Window handle for the scripting window.
+	HWND hwndScriptDlg;
 
+	/// Remembered default edit control's window procedure
+	WNDPROC defEditWndProc;
 
-static void (*CmdProc)(const char *buf) = NULL;
-static void ScriptDlgPrint(const char*);
+	/// Command history buffer
+	std::vector<char*> cmdHistory;
+	int currentHistory;
 
-void scripter_init(void commandProc(const char*), void (**printProc)(const char*)){
-	CmdProc = commandProc;
-	*printProc = ScriptDlgPrint;
+	void print(const char *line);
+
+	INT_PTR ScriptCommandProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+};
+
+static void PrintProc(ScripterWindow *p, const char *s){
+	static_cast<ScripterWindowImpl*>(p)->print(s);
 }
 
-/// Window handle for the scripting window.
-static HWND hwndScriptDlg = NULL;
+ScripterWindow *scripter_init(const ScripterConfig *sc){
+	*sc->printProc = PrintProc;
+	ScripterWindowImpl *ret = new ScripterWindowImpl;
+	ret->config = *sc;
+	ret->hwndScriptDlg = NULL;
+	ret->defEditWndProc = NULL;
+	ret->currentHistory = 0;
+	return ret;
+}
+
 
 /// Event handler function to receive printed messages in the console for displaying on scripting window.
-static void ScriptDlgPrint(const char *line){
+void ScripterWindowImpl::print(const char *line){
 	if(IsWindow(hwndScriptDlg)){
 		HWND hEdit = GetDlgItem(hwndScriptDlg, IDC_CONSOLE);
 		size_t buflen = GetWindowTextLength(hEdit);
@@ -31,17 +49,18 @@ static void ScriptDlgPrint(const char *line){
 	}
 }
 
-/// Remembered default edit control's window procedure
-static WNDPROC defEditWndProc = NULL;
-
 static HMODULE hSciLexer = NULL;
 
 /// \brief Window procedure to replace edit control for subclassing command edit control
 ///
 /// Handles enter key and up/down arrow keys to constomize behavior of default edit control.
 static INT_PTR CALLBACK ScriptCommandProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam){
-	static std::vector<char*> cmdHistory;
-	static int currentHistory = 0;
+	ScripterWindowImpl *p = (ScripterWindowImpl*)GetWindowLongPtr(hWnd, GWL_USERDATA);
+	return p->ScriptCommandProc(hWnd, message, wParam, lParam);
+}
+
+
+INT_PTR ScripterWindowImpl::ScriptCommandProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam){
 	switch (message)
 	{
 	case WM_GETDLGCODE:
@@ -63,7 +82,7 @@ static INT_PTR CALLBACK ScriptCommandProc(HWND hWnd, UINT message, WPARAM wParam
 			size_t buflen = GetWindowTextLengthA(hWnd);
 			char *buf = (char*)malloc(buflen+1);
 			GetWindowTextA(hWnd, buf, buflen+1);
-			CmdProc(buf);
+			config.commandProc(buf);
 			// Remember issued command in the history buffer only if the command is not repeated.
 			if(cmdHistory.empty() || strcmp(cmdHistory.back(), buf)){
 				cmdHistory.push_back(buf);
@@ -103,11 +122,18 @@ static INT_PTR CALLBACK ScriptCommandProc(HWND hWnd, UINT message, WPARAM wParam
 
 /// Dialog handler for scripting window
 static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam){
+	ScripterWindowImpl *p = (ScripterWindowImpl*)GetWindowLongPtr(hDlg, GWL_USERDATA);
 	static HWND hwndScintilla = NULL;
 	switch(message){
 	case WM_INITDIALOG:
-		defEditWndProc = (WNDPROC)GetWindowLongPtr(GetDlgItem(hDlg, IDC_COMMAND), GWLP_WNDPROC);
-		SetWindowLongPtr(GetDlgItem(hDlg, IDC_COMMAND), GWLP_WNDPROC, (LONG_PTR)ScriptCommandProc);
+		SetWindowLongPtr(hDlg, GWL_USERDATA, (LONG_PTR)lParam);
+		p = (ScripterWindowImpl*)lParam;
+		{
+			HWND hCommand = GetDlgItem(hDlg, IDC_COMMAND);
+			p->defEditWndProc = (WNDPROC)GetWindowLongPtr(hCommand, GWLP_WNDPROC);
+			SetWindowLongPtr(hCommand, GWLP_WNDPROC, (LONG_PTR)ScriptCommandProc);
+			SetWindowLongPtr(hCommand, GWL_USERDATA, (LONG_PTR)lParam);
+		}
 		if(hSciLexer){
 			HWND hScriptEdit = GetDlgItem(hDlg, IDC_SCRIPTEDIT);
 			RECT r;
@@ -125,7 +151,8 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 		}
 		break;
 	case WM_DESTROY:
-		hwndScriptDlg = NULL;
+		if(p)
+			p->hwndScriptDlg = NULL;
 		break;
 	case WM_SIZE:
 		{
@@ -159,7 +186,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 		}
 		break;
 	case WM_COMMAND:
-		{
+		if(p){
 			UINT id = LOWORD(wParam);
 			if(id == IDOK){
 				HWND hEdit = GetDlgItem(hDlg, IDC_SCRIPTEDIT);
@@ -187,7 +214,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 				return TRUE;
 			}
 			else if(id == IDC_CLEARCONSOLE){
-				SetDlgItemText(hwndScriptDlg, IDC_CONSOLE, "");
+				SetDlgItemText(p->hwndScriptDlg, IDC_CONSOLE, "");
 				return TRUE;
 			}
 			else if(id == IDM_SCRIPT_OPEN){
@@ -196,7 +223,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 					sizeof(OPENFILENAME), //  DWORD         lStructSize;
 					hDlg, //  HWND          hwndOwner;
 					NULL, // HINSTANCE     hInstance; ignored
-					"Squirrel Script (.nut)\0*.nut\0", //  LPCTSTR       lpstrFilter;
+					p->config.sourceFilters, //  LPCTSTR       lpstrFilter;
 					NULL, //  LPTSTR        lpstrCustomFilter;
 					0, // DWORD         nMaxCustFilter;
 					0, // DWORD         nFilterIndex;
@@ -205,7 +232,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 					NULL, //LPTSTR        lpstrFileTitle;
 					0, // DWORD         nMaxFileTitle;
 					".", // LPCTSTR       lpstrInitialDir;
-					"Select Squirrel Script to Load", // LPCTSTR       lpstrTitle;
+					"Open File", // LPCTSTR       lpstrTitle;
 					0, // DWORD         Flags;
 					0, // WORD          nFileOffset;
 					0, // WORD          nFileExtension;
@@ -215,7 +242,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 					NULL, // LPCTSTR       lpTemplateName;
 				};
 				if(GetOpenFileName(&ofn)){
-					HANDLE hFile = CreateFile(ofn.lpstrFile, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+					HANDLE hFile = CreateFileA(ofn.lpstrFile, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 					if(hFile){
 						DWORD textLen = GetFileSize(hFile, NULL);
 						char *text = (char*)malloc((textLen+1) * sizeof(char));
@@ -237,7 +264,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 }
 
 /// Toggle scripting window
-int scripter_show(){
+int scripter_show(ScripterWindow *sc){
 	if(!hSciLexer){
 		hSciLexer = LoadLibrary("SciLexer.DLL");
 		if(hSciLexer == NULL){
@@ -248,10 +275,11 @@ int scripter_show(){
 		}
 	}
 
-	if(!IsWindow(hwndScriptDlg)){
-		hwndScriptDlg = CreateDialogParam(GetModuleHandle(NULL), "ScriptWin", NULL, ScriptDlg, (LPARAM)0);
+	ScripterWindowImpl *p = (ScripterWindowImpl*)sc;
+	if(!IsWindow(p->hwndScriptDlg)){
+		p->hwndScriptDlg = CreateDialogParam(GetModuleHandle(NULL), "ScriptWin", NULL, ScriptDlg, (LPARAM)p);
 	}
 	else
-		ShowWindow(hwndScriptDlg, SW_SHOW);
+		ShowWindow(p->hwndScriptDlg, SW_SHOW);
 	return 0;
 }

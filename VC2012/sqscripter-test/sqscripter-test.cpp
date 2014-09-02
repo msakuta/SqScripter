@@ -22,18 +22,26 @@
 #include <string>
 #include <vector>
 
-static void (*PrintProc)(const char *) = NULL;
+static void (*PrintProc)(ScripterWindow *, const char *) = NULL;
+
+static ScripterWindow *sw = NULL;
 
 void CmdProc(const char *cmd){
 	MessageBox(NULL, cmd, "Command Executed", MB_ICONERROR);
-	PrintProc((std::string("Echo: ") + cmd).c_str());
+	PrintProc(sw, (std::string("Echo: ") + cmd).c_str());
 }
 
 int main(int argc, char *argv[])
 {
-	scripter_init(CmdProc, &PrintProc);
+	const char *filters = "All (*.*)\0*.*\0Squirrel Scripts (*.nut)\0*.nut";
+	ScripterConfig sc;
+	sc.commandProc = CmdProc;
+	sc.printProc = &PrintProc;
+	sc.sourceFilters = filters;
 
-	scripter_show();
+	sw = scripter_init(&sc);
+
+	scripter_show(sw);
 
 
 	do{
