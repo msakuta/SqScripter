@@ -28,3 +28,18 @@ with customized scripting window) and a test project.
 
 The source file named sqscripter-test.cpp demonstrates how to use this library.
 
+
+TO DO
+-----
+
+* Syntax highlighting
+
+This is why we use Scintilla from the first place.
+
+* Breakpoints
+
+* Run on separate thread
+
+If we break the main thread's execution by a breakpoint, we'd need another thread to debug.
+
+* Stack frame inspection
