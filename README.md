@@ -9,6 +9,9 @@ I wanted to use it for [Squirrel](http://www.squirrel-lang.org/) language, so th
 named Sqscripter, but it could be also used for other languages.
 
 
+![Screenshot](media/sqscripter.png)
+
+
 Supported Platform
 ------------------
 
