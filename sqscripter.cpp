@@ -212,9 +212,11 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 					return TRUE;*/
 				return TRUE;
 			}
-			else if(id == IDCANCEL)
+			else if(id == IDCANCEL || id == IDCLOSE)
 			{
 				EndDialog(hDlg, LOWORD(wParam));
+				if(p->config.onClose)
+					p->config.onClose(p);
 				return TRUE;
 			}
 			else if(id == IDC_CLEARCONSOLE){
@@ -289,4 +291,8 @@ int scripter_show(ScripterWindow *sc){
 	else
 		ShowWindow(p->hwndScriptDlg, SW_SHOW);
 	return 0;
+}
+
+void scripter_delete(ScripterWindow *sc){
+	delete sc;
 }

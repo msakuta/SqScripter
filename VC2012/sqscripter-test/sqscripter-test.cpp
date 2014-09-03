@@ -33,6 +33,11 @@ static void RunProc(const char *fileName, const char *content){
 	PrintProc(sw, (std::string("Content: \r\n") + content).c_str());
 }
 
+static void OnClose(ScripterWindow *sc){
+	scripter_delete(sc);
+	PostQuitMessage(0);
+}
+
 /// The starting point for this demonstration program.
 int main(int argc, char *argv[])
 {
@@ -42,6 +47,7 @@ int main(int argc, char *argv[])
 	sc.commandProc = CmdProc;
 	sc.printProc = &PrintProc;
 	sc.runProc = RunProc;
+	sc.onClose = OnClose;
 	sc.sourceFilters = filters;
 
 	// Initialize a Scripter window

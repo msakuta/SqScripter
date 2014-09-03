@@ -18,6 +18,7 @@ struct ScripterConfig{
 	void (*commandProc)(const char*);
 	void (**printProc)(ScripterWindow *, const char*);
 	void (*runProc)(const char *fileName, const char *content);
+	void (*onClose)(ScripterWindow*);
 	const char *sourceFilters;
 };
 
@@ -32,6 +33,10 @@ SCRIPTER_EXPORT ScripterWindow *scripter_init(const ScripterConfig *);
 
 /// \brief Show the scripter window
 SCRIPTER_EXPORT int scripter_show(ScripterWindow *);
+
+
+/// \brief Delete the scripter window
+SCRIPTER_EXPORT void scripter_delete(ScripterWindow *);
 
 
 #ifdef __cplusplus
