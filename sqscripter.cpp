@@ -267,6 +267,14 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 					}
 				}
 			}
+			else if(id == IDM_WHITESPACES){
+				bool newState = !(GetMenuState(GetMenu(hDlg), IDM_WHITESPACES, MF_BYCOMMAND) & MF_CHECKED);
+				CheckMenuItem(GetMenu(hDlg), IDM_WHITESPACES,
+					(newState ? MF_CHECKED : MF_UNCHECKED) | MF_BYCOMMAND);
+				HWND hScriptEdit = GetDlgItem(hDlg, IDC_SCRIPTEDIT);
+				if(hScriptEdit)
+					SendMessage(hScriptEdit, SCI_SETVIEWWS, newState ? SCWS_VISIBLEALWAYS : SCWS_INVISIBLE, 0);
+			}
 		}
 		break;
 	}

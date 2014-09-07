@@ -20,6 +20,10 @@ ScriptWinMenu MENU
     {
         MENUITEM "&Open", IDM_SCRIPT_OPEN
     }
+    POPUP "&View"
+    {
+        MENUITEM "Show &White Spaces", IDM_WHITESPACES
+    }
 }
 
 

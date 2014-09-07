@@ -7,3 +7,4 @@
 #define IDC_COMMAND                             1003
 #define IDC_CONSOLE                             1013
 #define IDM_SCRIPT_OPEN                         40000
+#define IDM_WHITESPACES                         40001
