@@ -23,6 +23,28 @@ Project files are only provided for Microsoft Visual Studio 2012 (Express), but
 it could be built with any compiler that are supported by Scintilla.
 
 
+Features
+--------
+
+These features are almost Scintilla's feature.
+
+* Syntax highlighting
+
+* Switchable line number display
+
+* Switchable white space visualization
+
+* Log window which records responses from the application
+
+Log window content is appended by the application's call to
+printProc.
+
+* One-line command text edit
+
+Command issued by enter key, interpreted by callback.
+Command history can be recalled by up/down arrow keys.
+
+
 How to Use
 ----------
 
@@ -34,10 +56,6 @@ The source file named sqscripter-test.cpp demonstrates how to use this library.
 
 TO DO
 -----
-
-* Syntax highlighting
-
-This is why we use Scintilla from the first place.
 
 * Breakpoints
 
