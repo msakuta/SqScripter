@@ -294,8 +294,10 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 				CheckMenuItem(GetMenu(hDlg), IDM_WHITESPACES,
 					(newState ? MF_CHECKED : MF_UNCHECKED) | MF_BYCOMMAND);
 				HWND hScriptEdit = GetDlgItem(hDlg, IDC_SCRIPTEDIT);
-				if(hScriptEdit)
+				if(hScriptEdit){
 					SendMessage(hScriptEdit, SCI_SETVIEWWS, newState ? SCWS_VISIBLEALWAYS : SCWS_INVISIBLE, 0);
+					SendMessage(hScriptEdit, SCI_SETWHITESPACEFORE, 1, 0x7f | (0xbf << 8) | (0xbf << 16));
+				}
 			}
 			else if(id == IDM_LINENUMBERS){
 				bool newState = !(GetMenuState(GetMenu(hDlg), IDM_LINENUMBERS, MF_BYCOMMAND) & MF_CHECKED);
