@@ -35,6 +35,11 @@ SCRIPTER_EXPORT ScripterWindow *scripter_init(const ScripterConfig *);
 SCRIPTER_EXPORT int scripter_show(ScripterWindow *);
 
 
+/// \brief Set Squirrel lexical coloring, must be called after scripter_show().
+/// \returns Nonzero if succeeded
+SCRIPTER_EXPORT int scripter_lexer_squirrel(ScripterWindow *);
+
+
 /// \brief Delete the scripter window
 SCRIPTER_EXPORT void scripter_delete(ScripterWindow *);
 

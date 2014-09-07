@@ -56,6 +56,9 @@ int main(int argc, char *argv[])
 	// Show the window on screen
 	scripter_show(sw);
 
+	// Set the lexer to squirrel
+	scripter_lexer_squirrel(sw);
+
 	// Windows message loop
 	do{
 		MSG msg;

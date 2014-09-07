@@ -1,5 +1,6 @@
 #include "sqscripter.h"
 #include "scintilla/include/Scintilla.h"
+#include "scintilla/include/SciLexer.h"
 
 #include <windows.h>
 #include "resource.h"
@@ -121,6 +122,10 @@ INT_PTR ScripterWindowImpl::ScriptCommandProc(HWND hWnd, UINT message, WPARAM wP
 
 	} /* end switch */
 	return CallWindowProc(defEditWndProc, hWnd, message, wParam, lParam);
+}
+
+inline int SciRGB(unsigned char r, unsigned char g, unsigned char b){
+	return r | (g << 8) | (b << 16);
 }
 
 /// Calculate width of line numbers margin by contents
@@ -296,7 +301,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 				HWND hScriptEdit = GetDlgItem(hDlg, IDC_SCRIPTEDIT);
 				if(hScriptEdit){
 					SendMessage(hScriptEdit, SCI_SETVIEWWS, newState ? SCWS_VISIBLEALWAYS : SCWS_INVISIBLE, 0);
-					SendMessage(hScriptEdit, SCI_SETWHITESPACEFORE, 1, 0x7f | (0xbf << 8) | (0xbf << 16));
+					SendMessage(hScriptEdit, SCI_SETWHITESPACEFORE, 1, SciRGB(0x7f, 0xbf, 0xbf));
 				}
 			}
 			else if(id == IDM_LINENUMBERS){
@@ -328,6 +333,30 @@ int scripter_show(ScripterWindow *sc){
 	}
 	else
 		ShowWindow(p->hwndScriptDlg, SW_SHOW);
+	return 0;
+}
+
+int scripter_lexer_squirrel(ScripterWindow *sc){
+	ScripterWindowImpl *p = static_cast<ScripterWindowImpl*>(sc);
+	HWND hScriptEdit = GetDlgItem(p->hwndScriptDlg, IDC_SCRIPTEDIT);
+	if(hScriptEdit){
+		SendMessage(hScriptEdit, SCI_SETLEXER, SCLEX_CPP, 0);
+		SendMessage(hScriptEdit, SCI_STYLESETFORE, SCE_C_COMMENT, SciRGB(0,127,0));
+		SendMessage(hScriptEdit, SCI_STYLESETFORE, SCE_C_COMMENTLINE, SciRGB(0,127,0));
+		SendMessage(hScriptEdit, SCI_STYLESETFORE, SCE_C_COMMENTDOC, SciRGB(0,127,0));
+		SendMessage(hScriptEdit, SCI_STYLESETFORE, SCE_C_NUMBER, SciRGB(0,127,255));
+		SendMessage(hScriptEdit, SCI_STYLESETFORE, SCE_C_WORD, SciRGB(0,0,255));
+		SendMessage(hScriptEdit, SCI_STYLESETFORE, SCE_C_STRING, SciRGB(127,0,0));
+		SendMessage(hScriptEdit, SCI_STYLESETFORE, SCE_C_CHARACTER, SciRGB(127,0,127));
+		SendMessage(hScriptEdit, SCI_SETKEYWORDS, 0,
+			(LPARAM)"base break case catch class clone "
+			"continue const default delete else enum "
+			"extends for foreach function if in "
+			"local null resume return switch this "
+			"throw try typeof while yield constructor "
+			"instanceof true false static ");
+		return 1;
+	}
 	return 0;
 }
 
