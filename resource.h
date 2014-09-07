@@ -8,3 +8,4 @@
 #define IDC_CONSOLE                             1013
 #define IDM_SCRIPT_OPEN                         40000
 #define IDM_WHITESPACES                         40001
+#define IDM_LINENUMBERS                         40002

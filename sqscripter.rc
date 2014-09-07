@@ -23,6 +23,7 @@ ScriptWinMenu MENU
     POPUP "&View"
     {
         MENUITEM "Show &White Spaces", IDM_WHITESPACES
+        MENUITEM "Show &Line Numbers", IDM_LINENUMBERS, CHECKED
     }
 }
 

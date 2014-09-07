@@ -123,6 +123,26 @@ INT_PTR ScripterWindowImpl::ScriptCommandProc(HWND hWnd, UINT message, WPARAM wP
 	return CallWindowProc(defEditWndProc, hWnd, message, wParam, lParam);
 }
 
+/// Calculate width of line numbers margin by contents
+static void RecalcLineNumberWidth(HWND hDlg){
+	HWND hScriptEdit = GetDlgItem(hDlg, IDC_SCRIPTEDIT);
+	if(!hScriptEdit)
+		return;
+	bool showState = (GetMenuState(GetMenu(hDlg), IDM_LINENUMBERS, MF_BYCOMMAND) & MF_CHECKED) != 0;
+
+	// Make sure to set type of the first margin to be line numbers
+	SendMessage(hScriptEdit, SCI_SETMARGINTYPEN, 0, SC_MARGIN_NUMBER);
+
+	// Obtain width needed to display all line count in the buffer
+	int lineCount = SendMessage(hScriptEdit, SCI_GETLINECOUNT, 0, 0);
+	std::string lineText = "_";
+	for(int i = 0; pow(10, i) <= lineCount; i++)
+		lineText += "9";
+
+	int width = showState ? SendMessage(hScriptEdit, SCI_TEXTWIDTH, STYLE_LINENUMBER, (LPARAM)lineText.c_str()) : 0;
+	SendMessage(hScriptEdit, SCI_SETMARGINWIDTHN, 0, width);
+}
+
 /// Dialog handler for scripting window
 static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam){
 	ScripterWindowImpl *p = (ScripterWindowImpl*)GetWindowLongPtr(hDlg, GWLP_USERDATA);
@@ -151,6 +171,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 				break;
 			// If we could create Scintilla window control, delete normal edit control.
 			DestroyWindow(hScriptEdit);
+			RecalcLineNumberWidth(hDlg);
 		}
 		break;
 	case WM_DESTROY:
@@ -264,6 +285,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 						free(text);
 						free(wtext);
 						p->fileName = ofn.lpstrFile;
+						RecalcLineNumberWidth(hDlg);
 					}
 				}
 			}
@@ -274,6 +296,12 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 				HWND hScriptEdit = GetDlgItem(hDlg, IDC_SCRIPTEDIT);
 				if(hScriptEdit)
 					SendMessage(hScriptEdit, SCI_SETVIEWWS, newState ? SCWS_VISIBLEALWAYS : SCWS_INVISIBLE, 0);
+			}
+			else if(id == IDM_LINENUMBERS){
+				bool newState = !(GetMenuState(GetMenu(hDlg), IDM_LINENUMBERS, MF_BYCOMMAND) & MF_CHECKED);
+				CheckMenuItem(GetMenu(hDlg), IDM_LINENUMBERS,
+					(newState ? MF_CHECKED : MF_UNCHECKED) | MF_BYCOMMAND);
+				RecalcLineNumberWidth(hDlg);
 			}
 		}
 		break;
