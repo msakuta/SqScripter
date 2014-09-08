@@ -40,6 +40,14 @@ SCRIPTER_EXPORT int scripter_show(ScripterWindow *);
 SCRIPTER_EXPORT int scripter_lexer_squirrel(ScripterWindow *);
 
 
+/// \brief Add a script error indicator to specified line in a specified source file.
+SCRIPTER_EXPORT void scripter_adderror(ScripterWindow*, const char *desc, const char *source, int line, int column);
+
+
+/// \brief Clear all error indicators in the window.
+SCRIPTER_EXPORT void scripter_clearerror(ScripterWindow*);
+
+
 /// \brief Delete the scripter window
 SCRIPTER_EXPORT void scripter_delete(ScripterWindow *);
 

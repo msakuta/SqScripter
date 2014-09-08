@@ -148,6 +148,30 @@ static void RecalcLineNumberWidth(HWND hDlg){
 	SendMessage(hScriptEdit, SCI_SETMARGINWIDTHN, 0, width);
 }
 
+static void LoadScriptFile(HWND hDlg, const char *fileName){
+	ScripterWindowImpl *p = (ScripterWindowImpl*)GetWindowLongPtr(hDlg, GWLP_USERDATA);
+	if(!p)
+		return;
+	HANDLE hFile = CreateFileA(fileName, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if(hFile){
+		DWORD textLen = GetFileSize(hFile, NULL);
+		char *text = (char*)malloc((textLen+1) * sizeof(char));
+		ReadFile(hFile, text, textLen, &textLen, NULL);
+		wchar_t *wtext = (wchar_t*)malloc((textLen+1) * sizeof(wchar_t));
+		text[textLen] = '\0';
+		::MultiByteToWideChar(CP_UTF8, 0, text, textLen, wtext, textLen);
+		// SetWindowTextA() seems to convert given string into unicode string prior to calling message handler.
+//						SetWindowTextA(GetDlgItem(hDlg, IDC_SCRIPTEDIT), text);
+		// SCI_SETTEXT seems to pass the pointer verbatum to the message handler.
+		SendMessageA(GetDlgItem(hDlg, IDC_SCRIPTEDIT), SCI_SETTEXT, 0, (LPARAM)text);
+		CloseHandle(hFile);
+		free(text);
+		free(wtext);
+		p->fileName = fileName;
+		RecalcLineNumberWidth(hDlg);
+	}
+}
+
 /// Dialog handler for scripting window
 static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam){
 	ScripterWindowImpl *p = (ScripterWindowImpl*)GetWindowLongPtr(hDlg, GWLP_USERDATA);
@@ -274,24 +298,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 					NULL, // LPCTSTR       lpTemplateName;
 				};
 				if(GetOpenFileNameA(&ofn)){
-					HANDLE hFile = CreateFileA(ofn.lpstrFile, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-					if(hFile){
-						DWORD textLen = GetFileSize(hFile, NULL);
-						char *text = (char*)malloc((textLen+1) * sizeof(char));
-						ReadFile(hFile, text, textLen, &textLen, NULL);
-						wchar_t *wtext = (wchar_t*)malloc((textLen+1) * sizeof(wchar_t));
-						text[textLen] = '\0';
-						::MultiByteToWideChar(CP_UTF8, 0, text, textLen, wtext, textLen);
-						// SetWindowTextA() seems to convert given string into unicode string prior to calling message handler.
-//						SetWindowTextA(GetDlgItem(hDlg, IDC_SCRIPTEDIT), text);
-						// SCI_SETTEXT seems to pass the pointer verbatum to the message handler.
-						SendMessageA(GetDlgItem(hDlg, IDC_SCRIPTEDIT), SCI_SETTEXT, 0, (LPARAM)text);
-						CloseHandle(hFile);
-						free(text);
-						free(wtext);
-						p->fileName = ofn.lpstrFile;
-						RecalcLineNumberWidth(hDlg);
-					}
+					LoadScriptFile(hDlg, ofn.lpstrFile);
 				}
 			}
 			else if(id == IDM_WHITESPACES){
@@ -378,6 +385,33 @@ int scripter_lexer_squirrel(ScripterWindow *sc){
 		return 1;
 	}
 	return 0;
+}
+
+void scripter_adderror(ScripterWindow *sc, const char *desc, const char *source, int line, int column){
+	ScripterWindowImpl *p = static_cast<ScripterWindowImpl*>(sc);
+	HWND hScriptEdit = GetDlgItem(p->hwndScriptDlg, IDC_SCRIPTEDIT);
+	if(hScriptEdit){
+		if(strcmp(source, "scriptbuf") && strcmp(source, p->fileName.c_str()))
+			LoadScriptFile(p->hwndScriptDlg, source);
+
+		int pos = SendMessage(hScriptEdit, SCI_POSITIONFROMLINE, line - 1, 0);
+		SendMessage(hScriptEdit, SCI_INDICSETSTYLE, 0, INDIC_SQUIGGLE);
+		SendMessage(hScriptEdit, SCI_INDICSETFORE, 0, SciRGB(255,0,0));
+		SendMessage(hScriptEdit, SCI_SETINDICATORCURRENT, 0, 0);
+		SendMessage(hScriptEdit, SCI_INDICATORFILLRANGE, pos + column - 1, SendMessage(hScriptEdit, SCI_LINELENGTH, 0, 0) - (column - 1));
+		SendMessage(hScriptEdit, SCI_MARKERDEFINE, 0, SC_MARK_CIRCLE);
+		SendMessage(hScriptEdit, SCI_MARKERSETFORE, 0, SciRGB(255,0,0));
+		SendMessage(hScriptEdit, SCI_MARKERADD, line - 1, 0);
+	}
+}
+
+void scripter_clearerror(ScripterWindow *sc){
+	ScripterWindowImpl *p = static_cast<ScripterWindowImpl*>(sc);
+	HWND hScriptEdit = GetDlgItem(p->hwndScriptDlg, IDC_SCRIPTEDIT);
+	if(hScriptEdit){
+		SendMessage(hScriptEdit, SCI_INDICATORCLEARRANGE, 0, SendMessage(hScriptEdit, SCI_GETLENGTH, 0, 0));
+		SendMessage(hScriptEdit, SCI_MARKERDELETEALL, 0, 0);
+	}
 }
 
 void scripter_delete(ScripterWindow *sc){
