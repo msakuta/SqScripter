@@ -344,6 +344,9 @@ int scripter_lexer_squirrel(ScripterWindow *sc){
 		SendMessage(hScriptEdit, SCI_STYLESETFORE, SCE_C_COMMENT, SciRGB(0,127,0));
 		SendMessage(hScriptEdit, SCI_STYLESETFORE, SCE_C_COMMENTLINE, SciRGB(0,127,0));
 		SendMessage(hScriptEdit, SCI_STYLESETFORE, SCE_C_COMMENTDOC, SciRGB(0,127,0));
+		SendMessage(hScriptEdit, SCI_STYLESETFORE, SCE_C_COMMENTLINEDOC, SciRGB(0,127,63));
+		SendMessage(hScriptEdit, SCI_STYLESETFORE, SCE_C_COMMENTDOCKEYWORD, SciRGB(0,63,127));
+		SendMessage(hScriptEdit, SCI_STYLESETFORE, SCE_C_COMMENTDOCKEYWORDERROR, SciRGB(255,0,0));
 		SendMessage(hScriptEdit, SCI_STYLESETFORE, SCE_C_NUMBER, SciRGB(0,127,255));
 		SendMessage(hScriptEdit, SCI_STYLESETFORE, SCE_C_WORD, SciRGB(0,0,255));
 		SendMessage(hScriptEdit, SCI_STYLESETFORE, SCE_C_STRING, SciRGB(127,0,0));
@@ -355,6 +358,23 @@ int scripter_lexer_squirrel(ScripterWindow *sc){
 			"local null resume return switch this "
 			"throw try typeof while yield constructor "
 			"instanceof true false static ");
+		SendMessage(hScriptEdit, SCI_SETKEYWORDS, 2,
+			(LPARAM)"a addindex addtogroup anchor arg attention author authors b brief bug "
+			"c callgraph callergraph category cite class code cond copybrief copydetails "
+			"copydoc copyright date def defgroup deprecated details diafile dir docbookonly "
+			"dontinclude dot dotfile e else elseif em endcode endcond enddocbookonly enddot "
+			"endhtmlonly endif endinternal endlatexonly endlink endmanonly endmsc endparblock "
+			"endrtfonly endsecreflist endverbatim enduml endxmlonly enum example exception extends "
+			"f$ f[ f] f{ f} file fn headerfile hideinitializer htmlinclude htmlonly idlexcept if "
+			"ifnot image implements include includelineno ingroup internal invariant interface "
+			"latexinclude latexonly li line link mainpage manonly memberof msc mscfile n name "
+			"namespace nosubgrouping note overload p package page par paragraph param parblock "
+			"post pre private privatesection property protected protectedsection protocol public "
+			"publicsection pure ref refitem related relates relatedalso relatesalso remark remarks "
+			"result return returns retval rtfonly sa secreflist section see short showinitializer "
+			"since skip skipline snippet startuml struct subpage subsection subsubsection "
+			"tableofcontents test throw throws todo tparam typedef union until var verbatim "
+			"verbinclude version vhdlflow warning weakgroup xmlonly xrefitem $ @ \\ & ~ < > # %");
 		return 1;
 	}
 	return 0;
