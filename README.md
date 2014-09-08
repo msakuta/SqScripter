@@ -34,6 +34,8 @@ These features are almost Scintilla's feature.
 
 * Switchable white space visualization
 
+* Compile / runtime error indication per line
+
 * Log window which records responses from the application
 
 Log window content is appended by the application's call to
