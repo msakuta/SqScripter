@@ -153,7 +153,7 @@ static void LoadScriptFile(HWND hDlg, const char *fileName){
 	if(!p)
 		return;
 	HANDLE hFile = CreateFileA(fileName, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-	if(hFile){
+	if(hFile != INVALID_HANDLE_VALUE){
 		DWORD textLen = GetFileSize(hFile, NULL);
 		char *text = (char*)malloc((textLen+1) * sizeof(char));
 		ReadFile(hFile, text, textLen, &textLen, NULL);
@@ -250,16 +250,8 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 				// Squirrel is not compiled with unicode, so we must convert text into utf-8, which is ascii transparent.
 				::WideCharToMultiByte(CP_UTF8, 0, wbuf, buflen, buf, buflen * 3, NULL, NULL);
 				p->config.runProc(p->fileName.c_str(), buf);
-/*				HSQUIRRELVM v = application.clientGame->sqvm;
-				if(SQ_FAILED(sq_compilebuffer(v, buf, strlen(buf), "buf", SQTrue))){
-					free(buf);
-					return TRUE;
-				}*/
 				free(buf);
 				free(wbuf);
-/*				sq_pushroottable(v);
-				if(SQ_FAILED(sq_call(v, 1, SQFalse, SQTrue)))
-					return TRUE;*/
 				return TRUE;
 			}
 			else if(id == IDCANCEL || id == IDCLOSE)
