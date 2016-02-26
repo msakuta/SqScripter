@@ -1,0 +1,20 @@
+
+# Visual C++ intermediate and output files
+*.obj
+*.res
+*.sbr
+*.log
+*.tlog
+*.pdb
+*.idb
+*.lib
+*.vcxproj.filters
+*.vcxproj.user
+*.dll
+*.suo
+*.exe
+*.ilk
+*.sdf
+*.opensdf
+*.exp
+*.bsc
