@@ -309,8 +309,8 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 					LoadScriptFile(hDlg, ofn.lpstrFile);
 				}
 			}
-			else if(id == IDM_SCRIPT_SAVE){
-				if(p->fileName.empty()){
+			else if(id == IDM_SCRIPT_SAVE || id == IDM_SCRIPT_SAVEAS){
+				if(p->fileName.empty() || id == IDM_SCRIPT_SAVEAS){
 					static char fileBuf[MAX_PATH];
 					OPENFILENAMEA ofn = {
 						sizeof(OPENFILENAME), //  DWORD         lStructSize;
