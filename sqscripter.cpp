@@ -24,6 +24,12 @@ struct ScripterWindowImpl : ScripterWindow{
 	void print(const char *line);
 
 	INT_PTR ScriptCommandProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+
+	void SetFileName(const char *fileName){
+		this->fileName = fileName;
+		std::string title = "Scripting Window (" + this->fileName + ")";
+		SetWindowTextA(hwndScriptDlg, title.c_str());
+	}
 };
 
 static void PrintProc(ScripterWindow *p, const char *s){
@@ -167,7 +173,7 @@ static void LoadScriptFile(HWND hDlg, const char *fileName){
 		CloseHandle(hFile);
 		free(text);
 		free(wtext);
-		p->fileName = fileName;
+		p->SetFileName(fileName);
 		RecalcLineNumberWidth(hDlg);
 	}
 }
@@ -184,7 +190,7 @@ static void SaveScriptFile(HWND hDlg, const char *fileName){
 		WriteFile(hFile, text, textLen, &textLen, NULL);
 		CloseHandle(hFile);
 		free(text);
-		p->fileName = fileName; // Remember the file name for the next save operation
+		p->SetFileName(fileName); // Remember the file name for the next save operation
 	}
 }
 
