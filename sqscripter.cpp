@@ -172,6 +172,22 @@ static void LoadScriptFile(HWND hDlg, const char *fileName){
 	}
 }
 
+static void SaveScriptFile(HWND hDlg, const char *fileName){
+	ScripterWindowImpl *p = (ScripterWindowImpl*)GetWindowLongPtr(hDlg, GWLP_USERDATA);
+	if(!p)
+		return;
+	HANDLE hFile = CreateFileA(fileName, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if(hFile != INVALID_HANDLE_VALUE){
+		DWORD textLen = SendMessageA(GetDlgItem(hDlg, IDC_SCRIPTEDIT), SCI_GETTEXTLENGTH, 0, 0);
+		char *text = (char*)malloc((textLen+1) * sizeof(char));
+		SendMessageA(GetDlgItem(hDlg, IDC_SCRIPTEDIT), SCI_GETTEXT, textLen + 1, (LPARAM)text);
+		WriteFile(hFile, text, textLen, &textLen, NULL);
+		CloseHandle(hFile);
+		free(text);
+		p->fileName = fileName; // Remember the file name for the next save operation
+	}
+}
+
 /// Dialog handler for scripting window
 static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam){
 	ScripterWindowImpl *p = (ScripterWindowImpl*)GetWindowLongPtr(hDlg, GWLP_USERDATA);
@@ -292,6 +308,38 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 				if(GetOpenFileNameA(&ofn)){
 					LoadScriptFile(hDlg, ofn.lpstrFile);
 				}
+			}
+			else if(id == IDM_SCRIPT_SAVE){
+				if(p->fileName.empty()){
+					static char fileBuf[MAX_PATH];
+					OPENFILENAMEA ofn = {
+						sizeof(OPENFILENAME), //  DWORD         lStructSize;
+						hDlg, //  HWND          hwndOwner;
+						NULL, // HINSTANCE     hInstance; ignored
+						p->config.sourceFilters, //  LPCTSTR       lpstrFilter;
+						NULL, //  LPTSTR        lpstrCustomFilter;
+						0, // DWORD         nMaxCustFilter;
+						0, // DWORD         nFilterIndex;
+						fileBuf, // LPTSTR        lpstrFile;
+						sizeof fileBuf, // DWORD         nMaxFile;
+						NULL, //LPTSTR        lpstrFileTitle;
+						0, // DWORD         nMaxFileTitle;
+						".", // LPCTSTR       lpstrInitialDir;
+						"Save File", // LPCTSTR       lpstrTitle;
+						OFN_OVERWRITEPROMPT, // DWORD         Flags;
+						0, // WORD          nFileOffset;
+						0, // WORD          nFileExtension;
+						NULL, // LPCTSTR       lpstrDefExt;
+						0, // LPARAM        lCustData;
+						NULL, // LPOFNHOOKPROC lpfnHook;
+						NULL, // LPCTSTR       lpTemplateName;
+					};
+					if(GetSaveFileNameA(&ofn)){
+						SaveScriptFile(hDlg, ofn.lpstrFile);
+					}
+				}
+				else
+					SaveScriptFile(hDlg, p->fileName.c_str());
 			}
 			else if(id == IDM_WHITESPACES){
 				bool newState = !(GetMenuState(GetMenu(hDlg), IDM_WHITESPACES, MF_BYCOMMAND) & MF_CHECKED);
