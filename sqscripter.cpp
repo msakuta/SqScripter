@@ -20,8 +20,11 @@ struct ScripterWindowImpl : ScripterWindow{
 	int currentHistory;
 
 	std::string fileName;
+	bool dirty;
 
 	void print(const char *line);
+
+	ScripterWindowImpl() : dirty(false){}
 
 	INT_PTR ScriptCommandProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
@@ -29,6 +32,17 @@ struct ScripterWindowImpl : ScripterWindow{
 		this->fileName = fileName;
 		std::string title = "Scripting Window (" + this->fileName + ")";
 		SetWindowTextA(hwndScriptDlg, title.c_str());
+	}
+
+	/// Update save point status (whether the document is dirty i.e. need to be saved before closing)
+	void SavePoint(bool reached){
+		std::string title = "Scripting Window ";
+		if(!reached)
+			title += "* ";
+		if(!fileName.empty())
+			title += "(" + this->fileName + ")";
+		SetWindowTextA(hwndScriptDlg, title.c_str());
+		dirty = !reached;
 	}
 };
 
@@ -173,6 +187,8 @@ static void LoadScriptFile(HWND hDlg, const char *fileName){
 		CloseHandle(hFile);
 		free(text);
 		free(wtext);
+		// Set savepoint for buffer dirtiness management
+		SendMessageA(GetDlgItem(hDlg, IDC_SCRIPTEDIT), SCI_SETSAVEPOINT, 0, 0);
 		p->SetFileName(fileName);
 		RecalcLineNumberWidth(hDlg);
 	}
@@ -190,6 +206,8 @@ static void SaveScriptFile(HWND hDlg, const char *fileName){
 		WriteFile(hFile, text, textLen, &textLen, NULL);
 		CloseHandle(hFile);
 		free(text);
+		// Set savepoint for buffer dirtiness management
+		SendMessageA(GetDlgItem(hDlg, IDC_SCRIPTEDIT), SCI_SETSAVEPOINT, 0, 0);
 		p->SetFileName(fileName); // Remember the file name for the next save operation
 	}
 }
@@ -278,9 +296,11 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 			}
 			else if(id == IDCANCEL || id == IDCLOSE)
 			{
-				EndDialog(hDlg, LOWORD(wParam));
-				if(p->config.onClose)
-					p->config.onClose(p);
+				if(!p->dirty || MessageBoxA(hDlg, "Current buffer is not saved. OK to close?", "Scripting Window", MB_OKCANCEL) == IDOK){
+					EndDialog(hDlg, LOWORD(wParam));
+					if(p->config.onClose)
+						p->config.onClose(p);
+				}
 				return TRUE;
 			}
 			else if(id == IDC_CLEARCONSOLE){
@@ -363,6 +383,16 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 					(newState ? MF_CHECKED : MF_UNCHECKED) | MF_BYCOMMAND);
 				RecalcLineNumberWidth(hDlg);
 			}
+		}
+		break;
+	case WM_NOTIFY:
+		if(p){
+			UINT id = LOWORD(wParam);
+			NMHDR *nmh = (NMHDR*)lParam;
+			if(nmh->idFrom == IDC_SCRIPTEDIT && nmh->code == SCN_SAVEPOINTREACHED)
+				p->SavePoint(true);
+			else if(nmh->idFrom == IDC_SCRIPTEDIT && nmh->code == SCN_SAVEPOINTLEFT)
+				p->SavePoint(false);
 		}
 		break;
 	}
