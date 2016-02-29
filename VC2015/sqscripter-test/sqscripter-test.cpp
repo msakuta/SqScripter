@@ -7,6 +7,11 @@
 
 #include "sqscripter.h"
 #include "squirrel.h"
+#include "sqstdblob.h"
+#include "sqstdio.h"
+#include "sqstdmath.h"
+#include "sqstdstring.h"
+#include "sqstdsystem.h"
 
 #include <windows.h>
 
@@ -109,6 +114,15 @@ int main(int argc, char *argv[])
 	sq_newclosure(sqvm, SqError, 0);
 	sq_seterrorhandler(sqvm);
 	sq_setcompilererrorhandler(sqvm, SqCompilerError);
+
+	// Load standard libraries to the root table
+	sq_pushroottable(sqvm);
+	sqstd_register_bloblib(sqvm);
+	sqstd_register_iolib(sqvm);
+	sqstd_register_mathlib(sqvm);
+	sqstd_register_stringlib(sqvm);
+	sqstd_register_systemlib(sqvm);
+	sq_poptop(sqvm);
 
 	// Show the window on screen
 	scripter_show(sw);

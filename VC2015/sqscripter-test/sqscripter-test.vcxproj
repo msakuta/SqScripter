@@ -80,7 +80,7 @@
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>SciLexer.lib;squirrel.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SciLexer.lib;squirrel.lib;sqstdlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(OutDir);../../squirrel3/VC2015/$(Platform)/$(Configuration)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -94,7 +94,7 @@
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(OutDir);../../squirrel3/VC2015/$(Platform)/$(Configuration)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>SciLexer.lib;squirrel.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SciLexer.lib;squirrel.lib;sqstdlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -111,7 +111,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <AdditionalLibraryDirectories>$(OutDir);../../squirrel3/VC2015/$(Platform)/$(Configuration)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>SciLexer.lib;squirrel.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SciLexer.lib;squirrel.lib;sqstdlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -128,7 +128,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <AdditionalLibraryDirectories>$(OutDir);../../squirrel3/VC2015/$(Platform)/$(Configuration)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>SciLexer.lib;squirrel.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SciLexer.lib;squirrel.lib;sqstdlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
