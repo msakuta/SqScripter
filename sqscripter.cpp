@@ -28,21 +28,25 @@ struct ScripterWindowImpl : ScripterWindow{
 
 	INT_PTR ScriptCommandProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
-	void SetFileName(const char *fileName){
-		this->fileName = fileName;
-		std::string title = "Scripting Window (" + this->fileName + ")";
-		SetWindowTextA(hwndScriptDlg, title.c_str());
-	}
-
-	/// Update save point status (whether the document is dirty i.e. need to be saved before closing)
-	void SavePoint(bool reached){
+	void UpdateTitle(){
 		std::string title = "Scripting Window ";
-		if(!reached)
+		if(dirty)
 			title += "* ";
 		if(!fileName.empty())
 			title += "(" + this->fileName + ")";
 		SetWindowTextA(hwndScriptDlg, title.c_str());
+	}
+
+	void SetFileName(const char *fileName, bool dirty = false){
+		this->fileName = fileName;
+		this->dirty = dirty;
+		UpdateTitle();
+	}
+
+	/// Update save point status (whether the document is dirty i.e. need to be saved before closing)
+	void SavePoint(bool reached){
 		dirty = !reached;
+		UpdateTitle();
 	}
 };
 
@@ -172,6 +176,14 @@ static void LoadScriptFile(HWND hDlg, const char *fileName){
 	ScripterWindowImpl *p = (ScripterWindowImpl*)GetWindowLongPtr(hDlg, GWLP_USERDATA);
 	if(!p)
 		return;
+
+	// Reset status to create an empty buffer if file name is absent
+	if(fileName[0] == '\0'){
+		SendMessageA(GetDlgItem(hDlg, IDC_SCRIPTEDIT), SCI_SETTEXT, 0, (LPARAM)"");
+		p->SetFileName("");
+		return;
+	}
+
 	HANDLE hFile = CreateFileA(fileName, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if(hFile != INVALID_HANDLE_VALUE){
 		DWORD textLen = GetFileSize(hFile, NULL);
@@ -305,6 +317,11 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 			}
 			else if(id == IDC_CLEARCONSOLE){
 				SetDlgItemText(p->hwndScriptDlg, IDC_CONSOLE, TEXT(""));
+				return TRUE;
+			}
+			else if(id == IDM_NEW){
+				if(!p->dirty || MessageBoxA(hDlg, "Current buffer is not saved. OK to close?", "Scripting Window", MB_OKCANCEL) == IDOK)
+					LoadScriptFile(hDlg, "");
 				return TRUE;
 			}
 			else if(id == IDM_SCRIPT_OPEN){

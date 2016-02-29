@@ -11,3 +11,4 @@
 #define IDM_SCRIPT_SAVEAS                       40002
 #define IDM_WHITESPACES                         40003
 #define IDM_LINENUMBERS                         40004
+#define IDM_NEW                                 40005
