@@ -4,9 +4,11 @@
 
 #include <windows.h>
 #include "resource.h"
+#include <CommCtrl.h>
 
 #include <string>
 #include <vector>
+#include <deque>
 
 struct ScripterWindowImpl : ScripterWindow{
 	/// Window handle for the scripting window.
@@ -19,35 +21,68 @@ struct ScripterWindowImpl : ScripterWindow{
 	std::vector<char*> cmdHistory;
 	int currentHistory;
 
-	std::string fileName;
-	bool dirty;
+	struct Buffer{
+		std::string fileName;
+		std::string contents;
+		bool dirty;
+		Buffer() : dirty(false){}
+	};
+
+	std::deque<Buffer> buffers;
+	int activeBuffer;
+
+	ScripterWindowImpl() : activeBuffer(0){}
 
 	void print(const char *line);
-
-	ScripterWindowImpl() : dirty(false){}
 
 	INT_PTR ScriptCommandProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
 	void UpdateTitle(){
 		std::string title = "Scripting Window ";
-		if(dirty)
-			title += "* ";
-		if(!fileName.empty())
-			title += "(" + this->fileName + ")";
+		if(0 <= activeBuffer && activeBuffer < buffers.size()){
+			Buffer &buf = buffers[activeBuffer];
+			if(buf.dirty)
+				title += "* ";
+			if(!buf.fileName.empty())
+				title += "(" + buf.fileName + ")";
+		}
 		SetWindowTextA(hwndScriptDlg, title.c_str());
 	}
 
 	void SetFileName(const char *fileName, bool dirty = false){
-		this->fileName = fileName;
-		this->dirty = dirty;
+		if(0 <= activeBuffer && activeBuffer < buffers.size()){
+			Buffer &buf = buffers[activeBuffer];
+			buf.fileName = fileName;
+			buf.dirty = dirty;
+
+			// Update current buffer's tab title string, too
+			TCITEMA tcitem;
+			tcitem.mask = TCIF_TEXT;
+			const char *pstr = strrchr(fileName, '\\');
+			tcitem.pszText = const_cast<LPSTR>(fileName[0] == '\0' ? "(New)" : pstr ? pstr+1 : fileName);
+			SendMessageA(GetDlgItem(hwndScriptDlg, IDC_TABBUFFER), TCM_SETITEMA, activeBuffer, (LPARAM)&tcitem);
+		}
 		UpdateTitle();
 	}
 
 	/// Update save point status (whether the document is dirty i.e. need to be saved before closing)
 	void SavePoint(bool reached){
-		dirty = !reached;
+		if(0 <= activeBuffer && activeBuffer < buffers.size()){
+			Buffer &buf = buffers[activeBuffer];
+			buf.dirty = !reached;
+		}
 		UpdateTitle();
 	}
+
+	Buffer &GetCurrentBuffer(){
+		if(0 <= activeBuffer && activeBuffer < buffers.size()){
+			Buffer &buf = buffers[activeBuffer];
+		}
+		else
+			throw std::exception("No active buffer");
+	}
+
+	void SetCurrentBuffer(int index);
 };
 
 static void PrintProc(ScripterWindow *p, const char *s){
@@ -74,6 +109,23 @@ void ScripterWindowImpl::print(const char *line){
 		std::string s = line;
 		s += "\r\n";
 		SendMessageA(hEdit, EM_REPLACESEL, 0, (LPARAM) s.c_str());
+	}
+}
+
+void ScripterWindowImpl::SetCurrentBuffer(int index){
+	if(0 <= index && index < buffers.size()){
+		if(0 <= activeBuffer && activeBuffer < buffers.size()){
+			DWORD textLen = SendMessageA(GetDlgItem(hwndScriptDlg, IDC_SCRIPTEDIT), SCI_GETTEXTLENGTH, 0, 0);
+			char *text = (char*)malloc((textLen+1) * sizeof(char));
+			SendMessageA(GetDlgItem(hwndScriptDlg, IDC_SCRIPTEDIT), SCI_GETTEXT, textLen + 1, (LPARAM)text);
+			buffers[activeBuffer].contents = text;
+			delete text;
+		}
+
+		activeBuffer = index;
+		Buffer &buf = buffers[index];
+		SetFileName(buf.fileName.c_str(), buf.dirty);
+		SendMessageA(GetDlgItem(hwndScriptDlg, IDC_SCRIPTEDIT), SCI_SETTEXT, 0, (LPARAM)buf.contents.c_str());
 	}
 }
 
@@ -177,6 +229,32 @@ static void LoadScriptFile(HWND hDlg, const char *fileName){
 	if(!p)
 		return;
 
+	ScripterWindowImpl::Buffer *buf = NULL;
+	// Find a buffer with the same file name and select it instead of creating a new buffer.
+	if(fileName[0]){
+		for(int i = 0; i < p->buffers.size(); i++){
+			if(p->buffers[i].fileName == fileName){
+				buf = &p->buffers[i];
+				p->SetCurrentBuffer(i);
+				SendMessageA(GetDlgItem(hDlg, IDC_TABBUFFER), TCM_SETCURSEL, i, 0);
+				break;
+			}
+		}
+	}
+	if(!buf){
+		p->buffers.push_back(ScripterWindowImpl::Buffer());
+		buf = &p->buffers.back();
+		buf->fileName = fileName;
+
+		TCITEMA tcitem;
+		tcitem.mask = TCIF_TEXT;
+		const char *pstr = strrchr(fileName, '\\');
+		tcitem.pszText = const_cast<LPSTR>(fileName[0] == '\0' ? "(New)" : pstr ? pstr+1 : fileName);
+		SendMessageA(GetDlgItem(hDlg, IDC_TABBUFFER), TCM_INSERTITEMA, p->buffers.size() - 1, (LPARAM)&tcitem);
+		p->SetCurrentBuffer(p->buffers.size() - 1);
+		SendMessageA(GetDlgItem(hDlg, IDC_TABBUFFER), TCM_SETCURSEL, p->buffers.size() - 1, 0);
+	}
+
 	// Reset status to create an empty buffer if file name is absent
 	if(fileName[0] == '\0'){
 		SendMessageA(GetDlgItem(hDlg, IDC_SCRIPTEDIT), SCI_SETTEXT, 0, (LPARAM)"");
@@ -252,6 +330,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 				break;
 			// If we could create Scintilla window control, delete normal edit control.
 			DestroyWindow(hScriptEdit);
+			LoadScriptFile(hDlg, ""); // Initialize with empty buffer
 			RecalcLineNumberWidth(hDlg);
 		}
 		break;
@@ -301,14 +380,14 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 				SendMessageW(hEdit, WM_GETTEXT, buflen, (LPARAM)wbuf);
 				// Squirrel is not compiled with unicode, so we must convert text into utf-8, which is ascii transparent.
 				::WideCharToMultiByte(CP_UTF8, 0, wbuf, buflen, buf, buflen * 3, NULL, NULL);
-				p->config.runProc(p->fileName.c_str(), buf);
+				p->config.runProc(p->GetCurrentBuffer().fileName.c_str(), buf);
 				free(buf);
 				free(wbuf);
 				return TRUE;
 			}
 			else if(id == IDCANCEL || id == IDCLOSE)
 			{
-				if(!p->dirty || MessageBoxA(hDlg, "Current buffer is not saved. OK to close?", "Scripting Window", MB_OKCANCEL) == IDOK){
+				if(!p->GetCurrentBuffer().dirty || MessageBoxA(hDlg, "Current buffer is not saved. OK to close?", "Scripting Window", MB_OKCANCEL) == IDOK){
 					EndDialog(hDlg, LOWORD(wParam));
 					if(p->config.onClose)
 						p->config.onClose(p);
@@ -320,7 +399,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 				return TRUE;
 			}
 			else if(id == IDM_NEW){
-				if(!p->dirty || MessageBoxA(hDlg, "Current buffer is not saved. OK to close?", "Scripting Window", MB_OKCANCEL) == IDOK)
+				if(!p->GetCurrentBuffer().dirty || MessageBoxA(hDlg, "Current buffer is not saved. OK to close?", "Scripting Window", MB_OKCANCEL) == IDOK)
 					LoadScriptFile(hDlg, "");
 				return TRUE;
 			}
@@ -353,7 +432,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 				}
 			}
 			else if(id == IDM_SCRIPT_SAVE || id == IDM_SCRIPT_SAVEAS){
-				if(p->fileName.empty() || id == IDM_SCRIPT_SAVEAS){
+				if(p->GetCurrentBuffer().fileName.empty() || id == IDM_SCRIPT_SAVEAS){
 					static char fileBuf[MAX_PATH];
 					OPENFILENAMEA ofn = {
 						sizeof(OPENFILENAME), //  DWORD         lStructSize;
@@ -382,7 +461,7 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 					}
 				}
 				else
-					SaveScriptFile(hDlg, p->fileName.c_str());
+					SaveScriptFile(hDlg, p->GetCurrentBuffer().fileName.c_str());
 			}
 			else if(id == IDM_WHITESPACES){
 				bool newState = !(GetMenuState(GetMenu(hDlg), IDM_WHITESPACES, MF_BYCOMMAND) & MF_CHECKED);
@@ -410,6 +489,10 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 				p->SavePoint(true);
 			else if(nmh->idFrom == IDC_SCRIPTEDIT && nmh->code == SCN_SAVEPOINTLEFT)
 				p->SavePoint(false);
+
+			if(nmh->idFrom == IDC_TABBUFFER && nmh->code == TCN_SELCHANGE){
+				p->SetCurrentBuffer(SendMessageA(GetDlgItem(hDlg, IDC_TABBUFFER), TCM_GETCURSEL, 0, 0));
+			}
 		}
 		break;
 	}
@@ -484,7 +567,7 @@ void scripter_adderror(ScripterWindow *sc, const char *desc, const char *source,
 	ScripterWindowImpl *p = static_cast<ScripterWindowImpl*>(sc);
 	HWND hScriptEdit = GetDlgItem(p->hwndScriptDlg, IDC_SCRIPTEDIT);
 	if(hScriptEdit){
-		if(strcmp(source, "scriptbuf") && strcmp(source, p->fileName.c_str()))
+		if(strcmp(source, "scriptbuf") && strcmp(source, p->GetCurrentBuffer().fileName.c_str()))
 			LoadScriptFile(p->hwndScriptDlg, source);
 
 		int pos = SendMessage(hScriptEdit, SCI_POSITIONFROMLINE, line - 1, 0);
