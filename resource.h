@@ -5,6 +5,7 @@
 #define IDC_CLEARCONSOLE                        1001
 #define IDC_SCRIPTEDIT                          1002
 #define IDC_COMMAND                             1003
+#define IDC_TABBUFFER                           1004
 #define IDC_CONSOLE                             1013
 #define IDM_SCRIPT_OPEN                         40000
 #define IDM_SCRIPT_SAVE                         40001
