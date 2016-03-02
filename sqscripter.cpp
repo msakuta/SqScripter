@@ -449,13 +449,22 @@ static INT_PTR CALLBACK ScriptDlg(HWND hDlg, UINT message, WPARAM wParam, LPARAM
 			HWND hEdit = GetDlgItem(hDlg, IDC_CONSOLE);
 			HWND hScr = GetDlgItem(hDlg, IDC_SCRIPTEDIT);
 			HWND hRun = GetDlgItem(hDlg, IDOK);
+			HWND hTab = GetDlgItem(hDlg, IDC_TABBUFFER);
 			RECT scr, runr, rect, cr, wr, comr;
 			GetClientRect(hDlg, &cr);
+			GetWindowRect(hRun, &runr);
+
+			// Adjust tabs bar size
+			RECT tabr;
+			GetWindowRect(hTab, &tabr);
+			POINT posTab = {tabr.left, tabr.top};
+			ScreenToClient(hDlg, &posTab);
+			SetWindowPos(hTab, NULL, 0, 0, cr.right - posTab.x - (runr.right - runr.left) - 10,
+				tabr.bottom - tabr.top, SWP_NOMOVE);
 
 			GetWindowRect(hScr, &scr);
 			POINT posScr = {scr.left, scr.top};
 			ScreenToClient(hDlg, &posScr);
-			GetWindowRect(hRun, &runr);
 			SetWindowPos(hScr, NULL, 0, 0, cr.right - posScr.x - (runr.right - runr.left) - 10,
 				scr.bottom - scr.top, SWP_NOMOVE);
 			// Update all Scintilla components including hidden ones
