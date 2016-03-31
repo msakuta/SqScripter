@@ -556,19 +556,37 @@ void SqScripterFrame::LoadScriptFile(const wxString& fileName){
 		return;
 	}
 
+	// Find a buffer with the same file name and select it instead of creating a new buffer.
+	int existingPage = -1;
+	for(int i = 0; i < note->GetPageCount(); i++){
+		StyledFileTextCtrl *stc = wxStaticCast(note->GetPage(i), StyledFileTextCtrl);
+		if(stc->fileName == fileName){
+			existingPage = i;
+			break;
+		}
+	}
+
 	wxFile file(fileName, wxFile::read);
 	if(file.IsOpened()){
 		wxString str;
 		if(file.ReadAll(&str)){
-			wxStyledTextCtrl *stc = new StyledFileTextCtrl(note, fileName);
-			SetStcLexer(stc);
+			wxStyledTextCtrl *stc;
+			if(existingPage < 0){
+				stc = new StyledFileTextCtrl(note, fileName);
+				SetStcLexer(stc);
+
+				note->AddPage(stc, wxFileName(fileName).GetFullName(), true, 0);
+			}
+			else{
+				stc = wxStaticCast(note->GetPage(size_t(existingPage)), StyledFileTextCtrl);
+				note->SetSelection(size_t(existingPage));
+			}
+
 			stc->SetText(str);
 
 			// Clear undo buffer instead of setting a savepoint because we don't want to undo to empty document
 			// if it's opened from a file.
 			stc->EmptyUndoBuffer();
-
-			note->AddPage(stc, wxFileName(fileName).GetFullName(), true, 0);
 
 			SetFileName(fileName);
 			RecalcLineNumberWidth();
