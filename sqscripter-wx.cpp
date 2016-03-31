@@ -58,6 +58,8 @@ public:
 	~SqScripterFrame()override;
 private:
 	void OnRun(wxCommandEvent& event);
+	void OnOpen(wxCommandEvent& event);
+	void OnSave(wxCommandEvent& event);
 	void OnExit(wxCommandEvent& event);
 	void OnAbout(wxCommandEvent& event);
 	wxDECLARE_EVENT_TABLE();
@@ -66,6 +68,7 @@ private:
 	void AddError(AddErrorEvent&);
 	void ClearError();
 	void RecalcLineNumberWidth();
+	void SaveScriptFile(const char *fileName);
 	void LoadScriptFile(wxString fileName);
 	void UpdateTitle();
 	void SetFileName(wxString fileName, bool dirty = false);
@@ -83,12 +86,16 @@ private:
 
 enum
 {
-	ID_Run = 1
+	ID_Run = 1,
+	ID_Open,
+	ID_Save
 };
 
 
 wxBEGIN_EVENT_TABLE(SqScripterFrame, wxFrame)
 EVT_MENU(ID_Run,   SqScripterFrame::OnRun)
+EVT_MENU(ID_Open,  SqScripterFrame::OnOpen)
+EVT_MENU(ID_Save,  SqScripterFrame::OnSave)
 EVT_MENU(wxID_EXIT,  SqScripterFrame::OnExit)
 EVT_MENU(wxID_ABOUT, SqScripterFrame::OnAbout)
 wxEND_EVENT_TABLE()
@@ -343,8 +350,10 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	stc(NULL), log(NULL), logger(NULL), dirty(false)
 {
 	wxMenu *menuFile = new wxMenu;
-	menuFile->Append(ID_Run, "&Run\tCtrl-R",
-		"Run the program");
+	menuFile->Append(ID_Run, "&Run\tCtrl-R", "Run the program");
+	menuFile->AppendSeparator();
+	menuFile->Append(ID_Open, "&Open\tCtrl-O", "Open a file");
+	menuFile->Append(ID_Save, "&Save\tCtrl-S", "Save and overwrite the file");
 	menuFile->AppendSeparator();
 	menuFile->Append(wxID_EXIT);
 	wxMenu *menuHelp = new wxMenu;
@@ -361,6 +370,8 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	wxToolBar *toolbar = CreateToolBar();
 	wxBitmap bm = wxImage(wxT("../../run.png"));
 	toolbar->AddTool(ID_Run, "Run", bm, "Run the program");
+	toolbar->AddTool(ID_Open, "Open", wxImage(wxT("../../open.png")), "Open a file");
+	toolbar->AddTool(ID_Save, "Save", wxImage(wxT("../../save.png")), "Save a file");
 	toolbar->Realize();
 	SetMenuBar( menuBar );
 	CreateStatusBar();
@@ -497,6 +508,20 @@ void SqScripterFrame::LoadScriptFile(wxString fileName){
 	}
 }
 
+void SqScripterFrame::SaveScriptFile(const char *fileName){
+	HANDLE hFile = CreateFileA(fileName, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if(hFile != INVALID_HANDLE_VALUE){
+		wxString text = stc->GetText();
+		DWORD textLen;
+		WriteFile(hFile, text, text.length(), &textLen, NULL);
+		CloseHandle(hFile);
+		// Set savepoint for buffer dirtiness management
+		stc->SetSavePoint();
+		SetFileName(fileName); // Remember the file name for the next save operation
+	}
+}
+
+
 void SqScripterFrame::UpdateTitle(){
 	wxString title = "Scripting Window " + fileName;
 	SetTitle(title);
@@ -529,4 +554,26 @@ void SqScripterFrame::OnRun(wxCommandEvent& event)
 	else
 		wxLogMessage("Run the program");
 	wxLog::SetActiveTarget(oldLogger);
+}
+
+void SqScripterFrame::OnOpen(wxCommandEvent& event)
+{
+	wxFileDialog openFileDialog(this, _("Open NUT file"), "", "",
+			"Squirrel source files (*.nut)|*.nut", wxFD_OPEN|wxFD_FILE_MUST_EXIST);
+
+	if (openFileDialog.ShowModal() == wxID_CANCEL)
+		return;
+
+	LoadScriptFile(openFileDialog.GetPath());
+}
+
+void SqScripterFrame::OnSave(wxCommandEvent& event)
+{
+	wxFileDialog openFileDialog(this, _("Save NUT file"), "", "",
+		"Squirrel source files (*.nut)|*.nut", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
+
+	if (openFileDialog.ShowModal() == wxID_CANCEL)
+		return;
+
+	SaveScriptFile(openFileDialog.GetPath());
 }
