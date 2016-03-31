@@ -97,7 +97,7 @@ static void OnClose(ScripterWindow *sc){
 int main(int argc, char *argv[])
 {
 	// Fill in the Scripter's config parameters.
-	const char *filters = "All (*.*)\0*.*\0Squirrel Scripts (*.nut)\0*.nut";
+	const char *filters = "All (*.*)|*.*|Squirrel Scripts (*.nut)|*.nut";
 	ScripterConfig sc;
 	sc.commandProc = CmdProc;
 	sc.printProc = &PrintProc;
