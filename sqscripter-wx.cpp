@@ -645,8 +645,9 @@ void SqScripterFrame::OnNew(wxCommandEvent&)
 
 void SqScripterFrame::OnOpen(wxCommandEvent& event)
 {
+	ScripterWindowImpl *handle = wxGetApp().handle;
 	wxFileDialog openFileDialog(this, _("Open NUT file"), "", "",
-			"Squirrel source files (*.nut)|*.nut", wxFD_OPEN|wxFD_FILE_MUST_EXIST);
+		handle && handle->config.sourceFilters ? handle->config.sourceFilters : "Squirrel source files (*.nut)|*.nut", wxFD_OPEN|wxFD_FILE_MUST_EXIST);
 
 	if (openFileDialog.ShowModal() == wxID_CANCEL)
 		return;
@@ -656,8 +657,9 @@ void SqScripterFrame::OnOpen(wxCommandEvent& event)
 
 void SqScripterFrame::OnSave(wxCommandEvent& event)
 {
+	ScripterWindowImpl *handle = wxGetApp().handle;
 	wxFileDialog openFileDialog(this, _("Save NUT file"), "", "",
-		"Squirrel source files (*.nut)|*.nut", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
+		handle && handle->config.sourceFilters ? handle->config.sourceFilters : "Squirrel source files (*.nut)|*.nut", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
 
 	if (openFileDialog.ShowModal() == wxID_CANCEL)
 		return;
