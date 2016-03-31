@@ -62,6 +62,7 @@ private:
 	void OnSave(wxCommandEvent& event);
 	void OnExit(wxCommandEvent& event);
 	void OnAbout(wxCommandEvent& event);
+	void OnClear(wxCommandEvent& event);
 	void OnEnterCmd(wxCommandEvent&);
 	wxDECLARE_EVENT_TABLE();
 
@@ -91,6 +92,7 @@ enum
 	ID_Run = 1,
 	ID_Open,
 	ID_Save,
+	ID_Clear,
 	ID_Command
 };
 
@@ -99,6 +101,7 @@ wxBEGIN_EVENT_TABLE(SqScripterFrame, wxFrame)
 EVT_MENU(ID_Run,   SqScripterFrame::OnRun)
 EVT_MENU(ID_Open,  SqScripterFrame::OnOpen)
 EVT_MENU(ID_Save,  SqScripterFrame::OnSave)
+EVT_MENU(ID_Clear,  SqScripterFrame::OnClear)
 EVT_MENU(wxID_EXIT,  SqScripterFrame::OnExit)
 EVT_MENU(wxID_ABOUT, SqScripterFrame::OnAbout)
 EVT_TEXT_ENTER(ID_Command, SqScripterFrame::OnEnterCmd)
@@ -359,6 +362,8 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	menuFile->Append(ID_Open, "&Open\tCtrl-O", "Open a file");
 	menuFile->Append(ID_Save, "&Save\tCtrl-S", "Save and overwrite the file");
 	menuFile->AppendSeparator();
+	menuFile->Append(ID_Clear, "&Clear Log\tCtrl-C", "Clear output log");
+	menuFile->AppendSeparator();
 	menuFile->Append(wxID_EXIT);
 	wxMenu *menuHelp = new wxMenu;
 	menuHelp->Append(wxID_ABOUT);
@@ -383,6 +388,7 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	toolbar->AddTool(ID_Run, "Run", bm, "Run the program");
 	toolbar->AddTool(ID_Open, "Open", wxImage(wxT("../../open.png")), "Open a file");
 	toolbar->AddTool(ID_Save, "Save", wxImage(wxT("../../save.png")), "Save a file");
+	toolbar->AddTool(ID_Clear, "Clear", wxImage(wxT("../../clear.png")), "Clear output log");
 	toolbar->Realize();
 	SetMenuBar( menuBar );
 	CreateStatusBar();
@@ -554,6 +560,10 @@ void SqScripterFrame::OnAbout(wxCommandEvent& event)
 {
 	wxMessageBox( "SqScripter powered by wxWidgets & Scintilla",
 		"About SqScripter", wxOK | wxICON_INFORMATION );
+}
+
+void SqScripterFrame::OnClear(wxCommandEvent& event){
+	log->Clear();
 }
 
 void SqScripterFrame::OnEnterCmd(wxCommandEvent& event){
