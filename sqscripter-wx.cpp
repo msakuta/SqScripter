@@ -348,10 +348,6 @@ void SqScripterApp::OnPrint(wxThreadEvent& evt){
 	*frame->log << evt.GetString();
 }
 
-inline int SciRGB(unsigned char r, unsigned char g, unsigned char b){
-	return r | (g << 8) | (b << 16);
-}
-
 SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, const wxSize& size)
 	: wxFrame(NULL, wxID_ANY, title, pos, size),
 	stc(NULL), log(NULL), logger(NULL), dirty(false)
@@ -410,15 +406,15 @@ SqScripterFrame::~SqScripterFrame(){
 void SqScripterFrame::SetLexer(){
 	stc->SetLexer(wxSTC_LEX_CPP);
 	stc->StyleSetForeground(wxSTC_C_COMMENT, wxColour(0,127,0));
-	stc->StyleSetForeground(wxSTC_C_COMMENTLINE, SciRGB(0,127,0));
-	stc->StyleSetForeground(wxSTC_C_COMMENTDOC, SciRGB(0,127,0));
-	stc->StyleSetForeground(wxSTC_C_COMMENTLINEDOC, SciRGB(0,127,63));
-	stc->StyleSetForeground(wxSTC_C_COMMENTDOCKEYWORD, SciRGB(0,63,127));
-	stc->StyleSetForeground(wxSTC_C_COMMENTDOCKEYWORDERROR, SciRGB(255,0,0));
-	stc->StyleSetForeground(wxSTC_C_NUMBER, SciRGB(0,127,255));
-	stc->StyleSetForeground(wxSTC_C_WORD, SciRGB(0,0,255));
-	stc->StyleSetForeground(wxSTC_C_STRING, SciRGB(127,0,0));
-	stc->StyleSetForeground(wxSTC_C_CHARACTER, SciRGB(127,0,127));
+	stc->StyleSetForeground(wxSTC_C_COMMENTLINE, wxColour(0,127,0));
+	stc->StyleSetForeground(wxSTC_C_COMMENTDOC, wxColour(0,127,0));
+	stc->StyleSetForeground(wxSTC_C_COMMENTLINEDOC, wxColour(0,127,63));
+	stc->StyleSetForeground(wxSTC_C_COMMENTDOCKEYWORD, wxColour(0,63,127));
+	stc->StyleSetForeground(wxSTC_C_COMMENTDOCKEYWORDERROR, wxColour(255,0,0));
+	stc->StyleSetForeground(wxSTC_C_NUMBER, wxColour(0,127,255));
+	stc->StyleSetForeground(wxSTC_C_WORD, wxColour(0,0,255));
+	stc->StyleSetForeground(wxSTC_C_STRING, wxColour(127,0,0));
+	stc->StyleSetForeground(wxSTC_C_CHARACTER, wxColour(127,0,127));
 	stc->SetKeyWords(0,
 		"base break case catch class clone "
 		"continue const default delete else enum "
@@ -445,7 +441,7 @@ void SqScripterFrame::SetLexer(){
 		"verbinclude version vhdlflow warning weakgroup xmlonly xrefitem $ @ \\ & ~ < > # %");
 	bool state = true;
 	stc->SetViewWhiteSpace(state ? wxSTC_WS_VISIBLEALWAYS : wxSTC_WS_INVISIBLE);
-	stc->SetWhitespaceForeground(true, SciRGB(0x7f, 0xbf, 0xbf));
+	stc->SetWhitespaceForeground(true, wxColour(0x7f, 0xbf, 0xbf));
 }
 
 void SqScripterFrame::AddError(AddErrorEvent &ae){
@@ -455,11 +451,11 @@ void SqScripterFrame::AddError(AddErrorEvent &ae){
 
 		int pos = stc->PositionFromLine(ae.line - 1);
 		stc->IndicatorSetStyle(0, wxSTC_INDIC_SQUIGGLE);
-		stc->IndicatorSetForeground(0, SciRGB(255,0,0));
+		stc->IndicatorSetForeground(0, wxColour(255,0,0));
 		stc->SetIndicatorCurrent(0);
 		stc->IndicatorFillRange(pos + ae.column - 1, stc->LineLength(0) - (ae.column - 1));
 		stc->MarkerDefine(0, wxSTC_MARK_CIRCLE);
-		stc->MarkerSetForeground(0, SciRGB(255,0,0));
+		stc->MarkerSetForeground(0, wxColour(255,0,0));
 		stc->MarkerAdd(ae.line - 1, 0);
 	}
 }
