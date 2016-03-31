@@ -11,6 +11,7 @@
 #include <wx/stc/stc.h>
 #include <wx/splitter.h>
 #include "wx/dynlib.h"
+#include <wx/file.h>
 
 #include <process.h> // for _beginthreadex()
 
@@ -70,10 +71,10 @@ private:
 	void AddError(AddErrorEvent&);
 	void ClearError();
 	void RecalcLineNumberWidth();
-	void SaveScriptFile(const char *fileName);
-	void LoadScriptFile(wxString fileName);
+	void LoadScriptFile(const wxString& fileName);
+	void SaveScriptFile(const wxString& fileName);
 	void UpdateTitle();
-	void SetFileName(wxString fileName, bool dirty = false);
+	void SetFileName(const wxString& fileName, bool dirty = false);
 
 	wxStyledTextCtrl *stc;
 	wxTextCtrl *log;
@@ -498,7 +499,7 @@ void SqScripterFrame::RecalcLineNumberWidth(){
 	}
 }
 
-void SqScripterFrame::LoadScriptFile(wxString fileName){
+void SqScripterFrame::LoadScriptFile(const wxString& fileName){
 
 	// Reset status to create an empty buffer if file name is absent
 	if(fileName.empty()){
@@ -507,38 +508,27 @@ void SqScripterFrame::LoadScriptFile(wxString fileName){
 		return;
 	}
 
-	HANDLE hFile = CreateFileA(fileName, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-	if(hFile != INVALID_HANDLE_VALUE){
-		DWORD textLen = GetFileSize(hFile, NULL);
-		char *text = (char*)malloc((textLen+1) * sizeof(char));
-		ReadFile(hFile, text, textLen, &textLen, NULL);
-		wchar_t *wtext = (wchar_t*)malloc((textLen+1) * sizeof(wchar_t));
-		text[textLen] = '\0';
-		::MultiByteToWideChar(CP_UTF8, 0, text, textLen, wtext, textLen);
-		// SetWindowTextA() seems to convert given string into unicode string prior to calling message handler.
-		//						SetWindowTextA(GetDlgItem(hDlg, IDC_SCRIPTEDIT), text);
-		// SCI_SETTEXT seems to pass the pointer verbatum to the message handler.
-		stc->SetText(text);
-		CloseHandle(hFile);
-		free(text);
-		free(wtext);
+	wxFile file(fileName, wxFile::read);
+	if(file.IsOpened()){
+		wxString str;
+		if(file.ReadAll(&str)){
+			stc->SetText(str);
 
-		// Clear undo buffer instead of setting a savepoint because we don't want to undo to empty document
-		// if it's opened from a file.
-		stc->EmptyUndoBuffer();
+			// Clear undo buffer instead of setting a savepoint because we don't want to undo to empty document
+			// if it's opened from a file.
+			stc->EmptyUndoBuffer();
 
-		SetFileName(fileName);
-		RecalcLineNumberWidth();
+			SetFileName(fileName);
+			RecalcLineNumberWidth();
+		}
 	}
 }
 
-void SqScripterFrame::SaveScriptFile(const char *fileName){
-	HANDLE hFile = CreateFileA(fileName, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	if(hFile != INVALID_HANDLE_VALUE){
+void SqScripterFrame::SaveScriptFile(const wxString& fileName){
+	wxFile hFile(fileName, wxFile::write);
+	if(hFile.IsOpened()){
 		wxString text = stc->GetText();
-		DWORD textLen;
-		WriteFile(hFile, text, text.length(), &textLen, NULL);
-		CloseHandle(hFile);
+		hFile.Write(text);
 		// Set savepoint for buffer dirtiness management
 		stc->SetSavePoint();
 		SetFileName(fileName); // Remember the file name for the next save operation
@@ -551,7 +541,7 @@ void SqScripterFrame::UpdateTitle(){
 	SetTitle(title);
 }
 
-void SqScripterFrame::SetFileName(wxString fileName, bool dirty){
+void SqScripterFrame::SetFileName(const wxString& fileName, bool dirty){
 	this->fileName = fileName;
 	this->dirty = dirty;
 
