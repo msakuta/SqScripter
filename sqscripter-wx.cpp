@@ -12,6 +12,8 @@
 #include <wx/splitter.h>
 #include "wx/dynlib.h"
 #include <wx/file.h>
+#include <wx/aui/auibook.h>
+#include <wx/filename.h>
 
 #include <process.h> // for _beginthreadex()
 
@@ -69,6 +71,7 @@ private:
 	wxDECLARE_EVENT_TABLE();
 
 	void SetLexer();
+	void SetStcLexer(wxStyledTextCtrl *stc);
 	void AddError(AddErrorEvent&);
 	void ClearError();
 	void RecalcLineNumberWidth();
@@ -77,11 +80,14 @@ private:
 	void UpdateTitle();
 	void SetFileName(const wxString& fileName, bool dirty = false);
 
-	wxStyledTextCtrl *stc;
+	wxAuiNotebook *note;
+	wxFont stcFont;
 	wxTextCtrl *log;
 	wxLog *logger;
 	wxTextCtrl *cmd;
 	wxString fileName;
+	enum{LexUnknown, LexSquirrel} lex;
+	int pageIndexGenerator;
 	bool dirty;
 
 	friend class SqScripterApp;
@@ -354,7 +360,7 @@ void SqScripterApp::OnPrint(wxThreadEvent& evt){
 
 SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, const wxSize& size)
 	: wxFrame(NULL, wxID_ANY, title, pos, size),
-	stc(NULL), log(NULL), logger(NULL), dirty(false)
+	log(NULL), logger(NULL), dirty(false), pageIndexGenerator(0)
 {
 	wxMenu *menuFile = new wxMenu;
 	menuFile->Append(ID_Run, "&Run\tCtrl-R", "Run the program");
@@ -377,17 +383,16 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	splitter->SetSashGravity(0.75);
 	splitter->SetMinimumPaneSize(40);
 
-	stc = new wxStyledTextCtrl(splitter);
+	note = new wxAuiNotebook(splitter);
 
 	// Set default font attributes and tab width.  They should really be configurable.
-	wxFont stcFont = wxFont(wxFontInfo(10).Family(wxFONTFAMILY_TELETYPE));
-	stc->SetFont(stcFont);
-	stc->StyleSetFont(wxSTC_STYLE_DEFAULT, stcFont);
-	stc->SetTabWidth(4);
+	stcFont = wxFont(wxFontInfo(10).Family(wxFONTFAMILY_TELETYPE));
+
+	OnNew(wxCommandEvent());
 
 	log = new wxTextCtrl(splitter, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE);
 	log->SetFont(stcFont);
-	splitter->SplitHorizontally(stc, log, 200);
+	splitter->SplitHorizontally(note, log, 200);
 
 	cmd = new wxTextCtrl(this, ID_Command, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
 	wxBoxSizer *sizer = new wxBoxSizer(wxVERTICAL);
@@ -411,12 +416,29 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 }
 
 SqScripterFrame::~SqScripterFrame(){
-	delete stc;
+	delete note;
 	delete log;
 	delete logger;
 }
 
 void SqScripterFrame::SetLexer(){
+	lex = LexSquirrel;
+	wxWindowList stcList = GetChildren();
+	for(size_t i = 0; i < note->GetPageCount(); i++){
+		wxWindow *w = note->GetPage(i);
+		if(!w)
+			continue;
+		wxStyledTextCtrl *stc = wxStaticCast(w, wxStyledTextCtrl);
+		SetStcLexer(stc);
+	}
+}
+
+void SqScripterFrame::SetStcLexer(wxStyledTextCtrl *stc){
+	stc->SetFont(stcFont);
+	stc->StyleSetFont(wxSTC_STYLE_DEFAULT, stcFont);
+	stc->SetTabWidth(4);
+	if(lex != LexSquirrel)
+		return;
 	stc->SetLexer(wxSTC_LEX_CPP);
 	stc->StyleSetForeground(wxSTC_C_COMMENT, wxColour(0,127,0));
 	stc->StyleSetForeground(wxSTC_C_COMMENTLINE, wxColour(0,127,0));
@@ -458,6 +480,10 @@ void SqScripterFrame::SetLexer(){
 }
 
 void SqScripterFrame::AddError(AddErrorEvent &ae){
+	wxWindow *w = note->GetCurrentPage();
+	if(!w)
+		return;
+	wxStyledTextCtrl *stc = static_cast<wxStyledTextCtrl*>(w);
 	if(stc){
 		if(strcmp(ae.source, "scriptbuf") /*&& strcmp(ae.source, p->GetCurrentBuffer().fileName.c_str())*/)
 			LoadScriptFile(ae.source);
@@ -474,6 +500,10 @@ void SqScripterFrame::AddError(AddErrorEvent &ae){
 }
 
 void SqScripterFrame::ClearError(){
+	wxWindow *w = note->GetCurrentPage();
+	if(!w)
+		return;
+	wxStyledTextCtrl *stc = static_cast<wxStyledTextCtrl*>(w);
 	if(stc){
 		stc->IndicatorClearRange(0, stc->GetLength());
 		stc->MarkerDeleteAll(0);
@@ -482,11 +512,10 @@ void SqScripterFrame::ClearError(){
 
 /// Calculate width of line numbers margin by contents
 void SqScripterFrame::RecalcLineNumberWidth(){
-//	ScripterWindowImpl *p = (ScripterWindowImpl*)GetWindowLongPtr(hDlg, GWLP_USERDATA);
-/*	for(int i = 0; i < p->buffers.size(); i++){
-		HWND hScriptEdit = p->buffers[i].hEdit;
-		if(!hScriptEdit)
-			return;*/
+	wxWindow *w = note->GetCurrentPage();
+	if(!w)
+		return;
+	wxStyledTextCtrl *stc = static_cast<wxStyledTextCtrl*>(w);
 	{
 		bool showState = true;//(GetMenuState(GetMenu(hDlg), IDM_LINENUMBERS, MF_BYCOMMAND) & MF_CHECKED) != 0;
 
@@ -517,11 +546,15 @@ void SqScripterFrame::LoadScriptFile(const wxString& fileName){
 	if(file.IsOpened()){
 		wxString str;
 		if(file.ReadAll(&str)){
+			wxStyledTextCtrl *stc = new wxStyledTextCtrl(note);
+			SetStcLexer(stc);
 			stc->SetText(str);
 
 			// Clear undo buffer instead of setting a savepoint because we don't want to undo to empty document
 			// if it's opened from a file.
 			stc->EmptyUndoBuffer();
+
+			note->AddPage(stc, wxFileName(fileName).GetFullName(), true, 0);
 
 			SetFileName(fileName);
 			RecalcLineNumberWidth();
@@ -530,6 +563,12 @@ void SqScripterFrame::LoadScriptFile(const wxString& fileName){
 }
 
 void SqScripterFrame::SaveScriptFile(const wxString& fileName){
+	wxWindow *w = note->GetCurrentPage();
+	if(!w)
+		return;
+	wxStyledTextCtrl *stc = static_cast<wxStyledTextCtrl*>(w);
+	if(!stc)
+		return;
 	wxFile hFile(fileName, wxFile::write);
 	if(hFile.IsOpened()){
 		wxString text = stc->GetText();
@@ -580,6 +619,13 @@ void SqScripterFrame::OnEnterCmd(wxCommandEvent& event){
 
 void SqScripterFrame::OnRun(wxCommandEvent& event)
 {
+	wxWindow *w = note->GetCurrentPage();
+	if(!w)
+		return;
+	wxStyledTextCtrl *stc = static_cast<wxStyledTextCtrl*>(w);
+	if(!stc)
+		return;
+
 	wxLog* oldLogger = wxLog::SetActiveTarget(logger);
 	wxStreamToTextRedirector redirect(log);
 	if(wxGetApp().handle && wxGetApp().handle->config.runProc)
@@ -591,7 +637,9 @@ void SqScripterFrame::OnRun(wxCommandEvent& event)
 
 void SqScripterFrame::OnNew(wxCommandEvent&)
 {
-	stc->ClearAll();
+	wxStyledTextCtrl *stc = new wxStyledTextCtrl(note);
+	SetStcLexer(stc);
+	note->AddPage(stc, wxString("(New ") << pageIndexGenerator++ << ")", true, 0);
 	SetFileName("");
 }
 
