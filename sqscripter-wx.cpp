@@ -11,6 +11,9 @@
 #include <wx/stc/stc.h>
 #include <wx/splitter.h>
 #include "wx/dynlib.h"
+#include <wx/file.h>
+#include <wx/aui/auibook.h>
+#include <wx/filename.h>
 
 #include <process.h> // for _beginthreadex()
 
@@ -58,25 +61,33 @@ public:
 	~SqScripterFrame()override;
 private:
 	void OnRun(wxCommandEvent& event);
+	void OnNew(wxCommandEvent& event);
 	void OnOpen(wxCommandEvent& event);
 	void OnSave(wxCommandEvent& event);
 	void OnExit(wxCommandEvent& event);
 	void OnAbout(wxCommandEvent& event);
+	void OnClear(wxCommandEvent& event);
+	void OnEnterCmd(wxCommandEvent&);
 	wxDECLARE_EVENT_TABLE();
 
 	void SetLexer();
+	void SetStcLexer(wxStyledTextCtrl *stc);
 	void AddError(AddErrorEvent&);
 	void ClearError();
 	void RecalcLineNumberWidth();
-	void SaveScriptFile(const char *fileName);
-	void LoadScriptFile(wxString fileName);
+	void LoadScriptFile(const wxString& fileName);
+	void SaveScriptFile(const wxString& fileName);
 	void UpdateTitle();
-	void SetFileName(wxString fileName, bool dirty = false);
+	void SetFileName(const wxString& fileName, bool dirty = false);
 
-	wxStyledTextCtrl *stc;
+	wxAuiNotebook *note;
+	wxFont stcFont;
 	wxTextCtrl *log;
 	wxLog *logger;
+	wxTextCtrl *cmd;
 	wxString fileName;
+	enum{LexUnknown, LexSquirrel} lex;
+	int pageIndexGenerator;
 	bool dirty;
 
 	friend class SqScripterApp;
@@ -87,17 +98,23 @@ private:
 enum
 {
 	ID_Run = 1,
+	ID_New,
 	ID_Open,
-	ID_Save
+	ID_Save,
+	ID_Clear,
+	ID_Command
 };
 
 
 wxBEGIN_EVENT_TABLE(SqScripterFrame, wxFrame)
 EVT_MENU(ID_Run,   SqScripterFrame::OnRun)
+EVT_MENU(ID_New,  SqScripterFrame::OnNew)
 EVT_MENU(ID_Open,  SqScripterFrame::OnOpen)
 EVT_MENU(ID_Save,  SqScripterFrame::OnSave)
+EVT_MENU(ID_Clear,  SqScripterFrame::OnClear)
 EVT_MENU(wxID_EXIT,  SqScripterFrame::OnExit)
 EVT_MENU(wxID_ABOUT, SqScripterFrame::OnAbout)
+EVT_TEXT_ENTER(ID_Command, SqScripterFrame::OnEnterCmd)
 wxEND_EVENT_TABLE()
 
 
@@ -341,19 +358,18 @@ void SqScripterApp::OnPrint(wxThreadEvent& evt){
 	*frame->log << evt.GetString();
 }
 
-inline int SciRGB(unsigned char r, unsigned char g, unsigned char b){
-	return r | (g << 8) | (b << 16);
-}
-
 SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, const wxSize& size)
 	: wxFrame(NULL, wxID_ANY, title, pos, size),
-	stc(NULL), log(NULL), logger(NULL), dirty(false)
+	log(NULL), logger(NULL), dirty(false), pageIndexGenerator(0)
 {
 	wxMenu *menuFile = new wxMenu;
 	menuFile->Append(ID_Run, "&Run\tCtrl-R", "Run the program");
 	menuFile->AppendSeparator();
+	menuFile->Append(ID_New, "&New\tCtrl-N", "Create a new buffer");
 	menuFile->Append(ID_Open, "&Open\tCtrl-O", "Open a file");
 	menuFile->Append(ID_Save, "&Save\tCtrl-S", "Save and overwrite the file");
+	menuFile->AppendSeparator();
+	menuFile->Append(ID_Clear, "&Clear Log\tCtrl-C", "Clear output log");
 	menuFile->AppendSeparator();
 	menuFile->Append(wxID_EXIT);
 	wxMenu *menuHelp = new wxMenu;
@@ -361,17 +377,36 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	wxMenuBar *menuBar = new wxMenuBar;
 	menuBar->Append( menuFile, "&File" );
 	menuBar->Append( menuHelp, "&Help" );
-	wxSplitterWindow *splitter = new wxSplitterWindow(this);
 
-	stc = new wxStyledTextCtrl(splitter);
+	wxSplitterWindow *splitter = new wxSplitterWindow(this);
+	// Script editing pane almost follows the window size, while the log pane occupies surplus area.
+	splitter->SetSashGravity(0.75);
+	splitter->SetMinimumPaneSize(40);
+
+	note = new wxAuiNotebook(splitter);
+
+	// Set default font attributes and tab width.  They should really be configurable.
+	stcFont = wxFont(wxFontInfo(10).Family(wxFONTFAMILY_TELETYPE));
+
+	OnNew(wxCommandEvent());
 
 	log = new wxTextCtrl(splitter, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE);
-	splitter->SplitHorizontally(stc, log, 200);
+	log->SetFont(stcFont);
+	splitter->SplitHorizontally(note, log, 200);
+
+	cmd = new wxTextCtrl(this, ID_Command, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
+	wxBoxSizer *sizer = new wxBoxSizer(wxVERTICAL);
+	sizer->Add(splitter, 1, wxEXPAND | wxALL);
+	sizer->Add(cmd, 0, wxEXPAND | wxBOTTOM);
+	SetSizer(sizer);
+
 	wxToolBar *toolbar = CreateToolBar();
 	wxBitmap bm = wxImage(wxT("../../run.png"));
 	toolbar->AddTool(ID_Run, "Run", bm, "Run the program");
+	toolbar->AddTool(ID_New, "New", wxImage(wxT("../../new.png")), "Create a new buffer");
 	toolbar->AddTool(ID_Open, "Open", wxImage(wxT("../../open.png")), "Open a file");
 	toolbar->AddTool(ID_Save, "Save", wxImage(wxT("../../save.png")), "Save a file");
+	toolbar->AddTool(ID_Clear, "Clear", wxImage(wxT("../../clear.png")), "Clear output log");
 	toolbar->Realize();
 	SetMenuBar( menuBar );
 	CreateStatusBar();
@@ -381,23 +416,40 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 }
 
 SqScripterFrame::~SqScripterFrame(){
-	delete stc;
+	delete note;
 	delete log;
 	delete logger;
 }
 
 void SqScripterFrame::SetLexer(){
+	lex = LexSquirrel;
+	wxWindowList stcList = GetChildren();
+	for(size_t i = 0; i < note->GetPageCount(); i++){
+		wxWindow *w = note->GetPage(i);
+		if(!w)
+			continue;
+		wxStyledTextCtrl *stc = wxStaticCast(w, wxStyledTextCtrl);
+		SetStcLexer(stc);
+	}
+}
+
+void SqScripterFrame::SetStcLexer(wxStyledTextCtrl *stc){
+	stc->SetFont(stcFont);
+	stc->StyleSetFont(wxSTC_STYLE_DEFAULT, stcFont);
+	stc->SetTabWidth(4);
+	if(lex != LexSquirrel)
+		return;
 	stc->SetLexer(wxSTC_LEX_CPP);
 	stc->StyleSetForeground(wxSTC_C_COMMENT, wxColour(0,127,0));
-	stc->StyleSetForeground(wxSTC_C_COMMENTLINE, SciRGB(0,127,0));
-	stc->StyleSetForeground(wxSTC_C_COMMENTDOC, SciRGB(0,127,0));
-	stc->StyleSetForeground(wxSTC_C_COMMENTLINEDOC, SciRGB(0,127,63));
-	stc->StyleSetForeground(wxSTC_C_COMMENTDOCKEYWORD, SciRGB(0,63,127));
-	stc->StyleSetForeground(wxSTC_C_COMMENTDOCKEYWORDERROR, SciRGB(255,0,0));
-	stc->StyleSetForeground(wxSTC_C_NUMBER, SciRGB(0,127,255));
-	stc->StyleSetForeground(wxSTC_C_WORD, SciRGB(0,0,255));
-	stc->StyleSetForeground(wxSTC_C_STRING, SciRGB(127,0,0));
-	stc->StyleSetForeground(wxSTC_C_CHARACTER, SciRGB(127,0,127));
+	stc->StyleSetForeground(wxSTC_C_COMMENTLINE, wxColour(0,127,0));
+	stc->StyleSetForeground(wxSTC_C_COMMENTDOC, wxColour(0,127,0));
+	stc->StyleSetForeground(wxSTC_C_COMMENTLINEDOC, wxColour(0,127,63));
+	stc->StyleSetForeground(wxSTC_C_COMMENTDOCKEYWORD, wxColour(0,63,127));
+	stc->StyleSetForeground(wxSTC_C_COMMENTDOCKEYWORDERROR, wxColour(255,0,0));
+	stc->StyleSetForeground(wxSTC_C_NUMBER, wxColour(0,127,255));
+	stc->StyleSetForeground(wxSTC_C_WORD, wxColour(0,0,255));
+	stc->StyleSetForeground(wxSTC_C_STRING, wxColour(127,0,0));
+	stc->StyleSetForeground(wxSTC_C_CHARACTER, wxColour(127,0,127));
 	stc->SetKeyWords(0,
 		"base break case catch class clone "
 		"continue const default delete else enum "
@@ -424,26 +476,34 @@ void SqScripterFrame::SetLexer(){
 		"verbinclude version vhdlflow warning weakgroup xmlonly xrefitem $ @ \\ & ~ < > # %");
 	bool state = true;
 	stc->SetViewWhiteSpace(state ? wxSTC_WS_VISIBLEALWAYS : wxSTC_WS_INVISIBLE);
-	stc->SetWhitespaceForeground(true, SciRGB(0x7f, 0xbf, 0xbf));
+	stc->SetWhitespaceForeground(true, wxColour(0x7f, 0xbf, 0xbf));
 }
 
 void SqScripterFrame::AddError(AddErrorEvent &ae){
+	wxWindow *w = note->GetCurrentPage();
+	if(!w)
+		return;
+	wxStyledTextCtrl *stc = static_cast<wxStyledTextCtrl*>(w);
 	if(stc){
 		if(strcmp(ae.source, "scriptbuf") /*&& strcmp(ae.source, p->GetCurrentBuffer().fileName.c_str())*/)
 			LoadScriptFile(ae.source);
 
 		int pos = stc->PositionFromLine(ae.line - 1);
 		stc->IndicatorSetStyle(0, wxSTC_INDIC_SQUIGGLE);
-		stc->IndicatorSetForeground(0, SciRGB(255,0,0));
+		stc->IndicatorSetForeground(0, wxColour(255,0,0));
 		stc->SetIndicatorCurrent(0);
 		stc->IndicatorFillRange(pos + ae.column - 1, stc->LineLength(0) - (ae.column - 1));
 		stc->MarkerDefine(0, wxSTC_MARK_CIRCLE);
-		stc->MarkerSetForeground(0, SciRGB(255,0,0));
+		stc->MarkerSetForeground(0, wxColour(255,0,0));
 		stc->MarkerAdd(ae.line - 1, 0);
 	}
 }
 
 void SqScripterFrame::ClearError(){
+	wxWindow *w = note->GetCurrentPage();
+	if(!w)
+		return;
+	wxStyledTextCtrl *stc = static_cast<wxStyledTextCtrl*>(w);
 	if(stc){
 		stc->IndicatorClearRange(0, stc->GetLength());
 		stc->MarkerDeleteAll(0);
@@ -452,11 +512,10 @@ void SqScripterFrame::ClearError(){
 
 /// Calculate width of line numbers margin by contents
 void SqScripterFrame::RecalcLineNumberWidth(){
-//	ScripterWindowImpl *p = (ScripterWindowImpl*)GetWindowLongPtr(hDlg, GWLP_USERDATA);
-/*	for(int i = 0; i < p->buffers.size(); i++){
-		HWND hScriptEdit = p->buffers[i].hEdit;
-		if(!hScriptEdit)
-			return;*/
+	wxWindow *w = note->GetCurrentPage();
+	if(!w)
+		return;
+	wxStyledTextCtrl *stc = static_cast<wxStyledTextCtrl*>(w);
 	{
 		bool showState = true;//(GetMenuState(GetMenu(hDlg), IDM_LINENUMBERS, MF_BYCOMMAND) & MF_CHECKED) != 0;
 
@@ -474,7 +533,7 @@ void SqScripterFrame::RecalcLineNumberWidth(){
 	}
 }
 
-void SqScripterFrame::LoadScriptFile(wxString fileName){
+void SqScripterFrame::LoadScriptFile(const wxString& fileName){
 
 	// Reset status to create an empty buffer if file name is absent
 	if(fileName.empty()){
@@ -483,38 +542,37 @@ void SqScripterFrame::LoadScriptFile(wxString fileName){
 		return;
 	}
 
-	HANDLE hFile = CreateFileA(fileName, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-	if(hFile != INVALID_HANDLE_VALUE){
-		DWORD textLen = GetFileSize(hFile, NULL);
-		char *text = (char*)malloc((textLen+1) * sizeof(char));
-		ReadFile(hFile, text, textLen, &textLen, NULL);
-		wchar_t *wtext = (wchar_t*)malloc((textLen+1) * sizeof(wchar_t));
-		text[textLen] = '\0';
-		::MultiByteToWideChar(CP_UTF8, 0, text, textLen, wtext, textLen);
-		// SetWindowTextA() seems to convert given string into unicode string prior to calling message handler.
-		//						SetWindowTextA(GetDlgItem(hDlg, IDC_SCRIPTEDIT), text);
-		// SCI_SETTEXT seems to pass the pointer verbatum to the message handler.
-		stc->SetText(text);
-		CloseHandle(hFile);
-		free(text);
-		free(wtext);
+	wxFile file(fileName, wxFile::read);
+	if(file.IsOpened()){
+		wxString str;
+		if(file.ReadAll(&str)){
+			wxStyledTextCtrl *stc = new wxStyledTextCtrl(note);
+			SetStcLexer(stc);
+			stc->SetText(str);
 
-		// Clear undo buffer instead of setting a savepoint because we don't want to undo to empty document
-		// if it's opened from a file.
-		stc->EmptyUndoBuffer();
+			// Clear undo buffer instead of setting a savepoint because we don't want to undo to empty document
+			// if it's opened from a file.
+			stc->EmptyUndoBuffer();
 
-		SetFileName(fileName);
-		RecalcLineNumberWidth();
+			note->AddPage(stc, wxFileName(fileName).GetFullName(), true, 0);
+
+			SetFileName(fileName);
+			RecalcLineNumberWidth();
+		}
 	}
 }
 
-void SqScripterFrame::SaveScriptFile(const char *fileName){
-	HANDLE hFile = CreateFileA(fileName, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	if(hFile != INVALID_HANDLE_VALUE){
+void SqScripterFrame::SaveScriptFile(const wxString& fileName){
+	wxWindow *w = note->GetCurrentPage();
+	if(!w)
+		return;
+	wxStyledTextCtrl *stc = static_cast<wxStyledTextCtrl*>(w);
+	if(!stc)
+		return;
+	wxFile hFile(fileName, wxFile::write);
+	if(hFile.IsOpened()){
 		wxString text = stc->GetText();
-		DWORD textLen;
-		WriteFile(hFile, text, text.length(), &textLen, NULL);
-		CloseHandle(hFile);
+		hFile.Write(text);
 		// Set savepoint for buffer dirtiness management
 		stc->SetSavePoint();
 		SetFileName(fileName); // Remember the file name for the next save operation
@@ -527,7 +585,7 @@ void SqScripterFrame::UpdateTitle(){
 	SetTitle(title);
 }
 
-void SqScripterFrame::SetFileName(wxString fileName, bool dirty){
+void SqScripterFrame::SetFileName(const wxString& fileName, bool dirty){
 	this->fileName = fileName;
 	this->dirty = dirty;
 
@@ -545,21 +603,51 @@ void SqScripterFrame::OnAbout(wxCommandEvent& event)
 		"About SqScripter", wxOK | wxICON_INFORMATION );
 }
 
-void SqScripterFrame::OnRun(wxCommandEvent& event)
-{
+void SqScripterFrame::OnClear(wxCommandEvent& event){
+	log->Clear();
+}
+
+void SqScripterFrame::OnEnterCmd(wxCommandEvent& event){
 	wxLog* oldLogger = wxLog::SetActiveTarget(logger);
 	wxStreamToTextRedirector redirect(log);
 	if(wxGetApp().handle && wxGetApp().handle->config.commandProc)
-		wxGetApp().handle->config.commandProc(stc->GetText());
+		wxGetApp().handle->config.commandProc(cmd->GetValue());
+	else
+		wxLogMessage("Execute the command");
+	wxLog::SetActiveTarget(oldLogger);
+}
+
+void SqScripterFrame::OnRun(wxCommandEvent& event)
+{
+	wxWindow *w = note->GetCurrentPage();
+	if(!w)
+		return;
+	wxStyledTextCtrl *stc = static_cast<wxStyledTextCtrl*>(w);
+	if(!stc)
+		return;
+
+	wxLog* oldLogger = wxLog::SetActiveTarget(logger);
+	wxStreamToTextRedirector redirect(log);
+	if(wxGetApp().handle && wxGetApp().handle->config.runProc)
+		wxGetApp().handle->config.runProc(fileName, stc->GetText());
 	else
 		wxLogMessage("Run the program");
 	wxLog::SetActiveTarget(oldLogger);
 }
 
+void SqScripterFrame::OnNew(wxCommandEvent&)
+{
+	wxStyledTextCtrl *stc = new wxStyledTextCtrl(note);
+	SetStcLexer(stc);
+	note->AddPage(stc, wxString("(New ") << pageIndexGenerator++ << ")", true, 0);
+	SetFileName("");
+}
+
 void SqScripterFrame::OnOpen(wxCommandEvent& event)
 {
+	ScripterWindowImpl *handle = wxGetApp().handle;
 	wxFileDialog openFileDialog(this, _("Open NUT file"), "", "",
-			"Squirrel source files (*.nut)|*.nut", wxFD_OPEN|wxFD_FILE_MUST_EXIST);
+		handle && handle->config.sourceFilters ? handle->config.sourceFilters : "Squirrel source files (*.nut)|*.nut", wxFD_OPEN|wxFD_FILE_MUST_EXIST);
 
 	if (openFileDialog.ShowModal() == wxID_CANCEL)
 		return;
@@ -569,8 +657,9 @@ void SqScripterFrame::OnOpen(wxCommandEvent& event)
 
 void SqScripterFrame::OnSave(wxCommandEvent& event)
 {
+	ScripterWindowImpl *handle = wxGetApp().handle;
 	wxFileDialog openFileDialog(this, _("Save NUT file"), "", "",
-		"Squirrel source files (*.nut)|*.nut", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
+		handle && handle->config.sourceFilters ? handle->config.sourceFilters : "Squirrel source files (*.nut)|*.nut", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
 
 	if (openFileDialog.ShowModal() == wxID_CANCEL)
 		return;
