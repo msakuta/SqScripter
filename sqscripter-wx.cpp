@@ -370,7 +370,11 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	wxMenuBar *menuBar = new wxMenuBar;
 	menuBar->Append( menuFile, "&File" );
 	menuBar->Append( menuHelp, "&Help" );
+
 	wxSplitterWindow *splitter = new wxSplitterWindow(this);
+	// Script editing pane almost follows the window size, while the log pane occupies surplus area.
+	splitter->SetSashGravity(0.75);
+	splitter->SetMinimumPaneSize(40);
 
 	stc = new wxStyledTextCtrl(splitter);
 
