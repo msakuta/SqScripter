@@ -93,6 +93,20 @@ private:
 	friend class SqScripterApp;
 };
 
+/// Inherit to create a new class for edit control only because we want to remember the name of file
+/// along with edit control.
+/// We could have a list of strings in the same order as the wxAuiNotebook's children, but wxAuiNotebook
+/// allow the user to change order or even close the pages with GUI, which makes tracking and synchronizing
+/// the order between two lists be so difficult.
+/// Inheriting and adding a member variable is one of the easiest ways to ensure that additional information
+/// always moves along with the page.
+class StyledFileTextCtrl : public wxStyledTextCtrl{
+public:
+	StyledFileTextCtrl(wxWindow *parent, const wxString &fileName) : wxStyledTextCtrl(parent), fileName(fileName){
+	}
+
+	wxString fileName;
+};
 
 
 enum
@@ -546,7 +560,7 @@ void SqScripterFrame::LoadScriptFile(const wxString& fileName){
 	if(file.IsOpened()){
 		wxString str;
 		if(file.ReadAll(&str)){
-			wxStyledTextCtrl *stc = new wxStyledTextCtrl(note);
+			wxStyledTextCtrl *stc = new StyledFileTextCtrl(note, fileName);
 			SetStcLexer(stc);
 			stc->SetText(str);
 
@@ -566,7 +580,7 @@ void SqScripterFrame::SaveScriptFile(const wxString& fileName){
 	wxWindow *w = note->GetCurrentPage();
 	if(!w)
 		return;
-	wxStyledTextCtrl *stc = static_cast<wxStyledTextCtrl*>(w);
+	StyledFileTextCtrl *stc = wxStaticCast(w, StyledFileTextCtrl);
 	if(!stc)
 		return;
 	wxFile hFile(fileName, wxFile::write);
@@ -575,7 +589,10 @@ void SqScripterFrame::SaveScriptFile(const wxString& fileName){
 		hFile.Write(text);
 		// Set savepoint for buffer dirtiness management
 		stc->SetSavePoint();
-		SetFileName(fileName); // Remember the file name for the next save operation
+		SetFileName(fileName); // Update the title string
+		stc->fileName = fileName; // Remember the file name for the next save operation
+		// Update the tab text
+		note->SetPageText(note->GetPageIndex(w), wxFileName(fileName).GetFullName());
 	}
 }
 
@@ -637,7 +654,7 @@ void SqScripterFrame::OnRun(wxCommandEvent& event)
 
 void SqScripterFrame::OnNew(wxCommandEvent&)
 {
-	wxStyledTextCtrl *stc = new wxStyledTextCtrl(note);
+	wxStyledTextCtrl *stc = new StyledFileTextCtrl(note, "");
 	SetStcLexer(stc);
 	note->AddPage(stc, wxString("(New ") << pageIndexGenerator++ << ")", true, 0);
 	SetFileName("");
@@ -657,8 +674,9 @@ void SqScripterFrame::OnOpen(wxCommandEvent& event)
 
 void SqScripterFrame::OnSave(wxCommandEvent& event)
 {
+	StyledFileTextCtrl *stc = wxStaticCast(note->GetCurrentPage(), StyledFileTextCtrl);
 	ScripterWindowImpl *handle = wxGetApp().handle;
-	wxFileDialog openFileDialog(this, _("Save NUT file"), "", "",
+	wxFileDialog openFileDialog(this, _("Save NUT file"), "", stc ? stc->fileName : "",
 		handle && handle->config.sourceFilters ? handle->config.sourceFilters : "Squirrel source files (*.nut)|*.nut", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
 
 	if (openFileDialog.ShowModal() == wxID_CANCEL)
