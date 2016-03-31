@@ -265,7 +265,7 @@ int scripter_show(ScripterWindow *){
 		new wxThreadEvent(wxEVT_THREAD, CMD_SHOW_WINDOW);
 	wxQueueEvent(wxApp::GetInstance(), event);
 
-	return 1;
+	return 0;
 }
 
 int scripter_lexer_squirrel(ScripterWindow *){
@@ -274,7 +274,7 @@ int scripter_lexer_squirrel(ScripterWindow *){
 		new wxThreadEvent(wxEVT_THREAD, CMD_SETLEXER);
 	wxQueueEvent(wxApp::GetInstance(), event);
 
-	return 1;
+	return 0;
 }
 
 /// \brief Add a script error indicator to specified line in a specified source file.
