@@ -59,6 +59,7 @@ public:
 	~SqScripterFrame()override;
 private:
 	void OnRun(wxCommandEvent& event);
+	void OnNew(wxCommandEvent& event);
 	void OnOpen(wxCommandEvent& event);
 	void OnSave(wxCommandEvent& event);
 	void OnExit(wxCommandEvent& event);
@@ -91,6 +92,7 @@ private:
 enum
 {
 	ID_Run = 1,
+	ID_New,
 	ID_Open,
 	ID_Save,
 	ID_Clear,
@@ -100,6 +102,7 @@ enum
 
 wxBEGIN_EVENT_TABLE(SqScripterFrame, wxFrame)
 EVT_MENU(ID_Run,   SqScripterFrame::OnRun)
+EVT_MENU(ID_New,  SqScripterFrame::OnNew)
 EVT_MENU(ID_Open,  SqScripterFrame::OnOpen)
 EVT_MENU(ID_Save,  SqScripterFrame::OnSave)
 EVT_MENU(ID_Clear,  SqScripterFrame::OnClear)
@@ -356,6 +359,7 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	wxMenu *menuFile = new wxMenu;
 	menuFile->Append(ID_Run, "&Run\tCtrl-R", "Run the program");
 	menuFile->AppendSeparator();
+	menuFile->Append(ID_New, "&New\tCtrl-N", "Create a new buffer");
 	menuFile->Append(ID_Open, "&Open\tCtrl-O", "Open a file");
 	menuFile->Append(ID_Save, "&Save\tCtrl-S", "Save and overwrite the file");
 	menuFile->AppendSeparator();
@@ -394,6 +398,7 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	wxToolBar *toolbar = CreateToolBar();
 	wxBitmap bm = wxImage(wxT("../../run.png"));
 	toolbar->AddTool(ID_Run, "Run", bm, "Run the program");
+	toolbar->AddTool(ID_New, "New", wxImage(wxT("../../new.png")), "Create a new buffer");
 	toolbar->AddTool(ID_Open, "Open", wxImage(wxT("../../open.png")), "Open a file");
 	toolbar->AddTool(ID_Save, "Save", wxImage(wxT("../../save.png")), "Save a file");
 	toolbar->AddTool(ID_Clear, "Clear", wxImage(wxT("../../clear.png")), "Clear output log");
@@ -582,6 +587,12 @@ void SqScripterFrame::OnRun(wxCommandEvent& event)
 	else
 		wxLogMessage("Run the program");
 	wxLog::SetActiveTarget(oldLogger);
+}
+
+void SqScripterFrame::OnNew(wxCommandEvent&)
+{
+	stc->ClearAll();
+	SetFileName("");
 }
 
 void SqScripterFrame::OnOpen(wxCommandEvent& event)
