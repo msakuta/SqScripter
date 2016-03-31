@@ -76,12 +76,12 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>../..;../../squirrel3/include;$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../..;../../squirrel3/include;../../wxWidgets-3.1.0-headers\include;../../wxBin\wxMSW-3.1.0_vc140_Dev\lib\vc140_dll\mswu;$(ProjectDir)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>SciLexer.lib;squirrel.lib;sqstdlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(OutDir);../../squirrel3/VC2015/$(Platform)/$(Configuration)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>sqscripter-wx.lib;squirrel.lib;sqstdlib.lib;wxbase31u.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(OutDir);../../squirrel3/VC2015/$(Platform)/$(Configuration);../../wxBin\wxMSW-3.1.0_vc140_Dev\lib\vc140_dll</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -89,12 +89,12 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>../..;../../squirrel3/include;$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../..;../../squirrel3/include;../../wxWidgets-3.1.0-headers\include;../../wxBin\wxMSW-3.1.0_vc140_Dev\lib\vc140_dll\mswu;$(ProjectDir)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(OutDir);../../squirrel3/VC2015/$(Platform)/$(Configuration)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>SciLexer.lib;squirrel.lib;sqstdlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>sqscripter-wx.lib;squirrel.lib;sqstdlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -104,14 +104,14 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>../..;../../squirrel3/include;$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../..;../../squirrel3/include;../../wxWidgets-3.1.0-headers\include;../../wxBin\wxMSW-3.1.0_vc140_Dev\lib\vc140_dll\mswu;$(ProjectDir)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>$(OutDir);../../squirrel3/VC2015/$(Platform)/$(Configuration)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>SciLexer.lib;squirrel.lib;sqstdlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(OutDir);../../squirrel3/VC2015/$(Platform)/$(Configuration);../../wxBin\wxMSW-3.1.0_vc140_Dev\lib\vc140_dll</AdditionalLibraryDirectories>
+      <AdditionalDependencies>sqscripter-wx.lib;squirrel.lib;sqstdlib.lib;wxbase31u.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -121,14 +121,14 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>../..;../../squirrel3/include;$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../..;../../squirrel3/include;../../wxWidgets-3.1.0-headers\include;../../wxBin\wxMSW-3.1.0_vc140_Dev\lib\vc140_dll\mswu;$(ProjectDir)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <AdditionalLibraryDirectories>$(OutDir);../../squirrel3/VC2015/$(Platform)/$(Configuration)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>SciLexer.lib;squirrel.lib;sqstdlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>sqscripter-wx.lib;squirrel.lib;sqstdlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
