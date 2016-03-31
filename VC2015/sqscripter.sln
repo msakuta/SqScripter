@@ -7,7 +7,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SciLexer", "..\scintilla\wi
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sqscripter-test", "sqscripter-test\sqscripter-test.vcxproj", "{14ACBAA9-3C75-4B98-AF8C-1B0C27E870DB}"
 	ProjectSection(ProjectDependencies) = postProject
-		{FBE04237-9C7B-4973-9C60-505975998B39} = {FBE04237-9C7B-4973-9C60-505975998B39}
+		{F3742D07-E282-4890-93E0-09D8B33AF855} = {F3742D07-E282-4890-93E0-09D8B33AF855}
 		{B7D1044C-39AC-46D0-ADF8-8D6EA40B21A8} = {B7D1044C-39AC-46D0-ADF8-8D6EA40B21A8}
 		{66B080B3-BC89-491B-A411-772E4708F277} = {66B080B3-BC89-491B-A411-772E4708F277}
 	EndProjectSection
@@ -15,6 +15,8 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "squirrel", "..\squirrel3\squirrel\squirrel.vcxproj", "{66B080B3-BC89-491B-A411-772E4708F277}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sqstdlib", "..\squirrel3\sqstdlib\sqstdlib.vcxproj", "{B7D1044C-39AC-46D0-ADF8-8D6EA40B21A8}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sqscripter-wx", "sqscripter-wx\sqscripter-wx.vcxproj", "{F3742D07-E282-4890-93E0-09D8B33AF855}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -56,6 +58,14 @@ Global
 		{B7D1044C-39AC-46D0-ADF8-8D6EA40B21A8}.Release|Win32.Build.0 = Release|Win32
 		{B7D1044C-39AC-46D0-ADF8-8D6EA40B21A8}.Release|x64.ActiveCfg = Release|x64
 		{B7D1044C-39AC-46D0-ADF8-8D6EA40B21A8}.Release|x64.Build.0 = Release|x64
+		{F3742D07-E282-4890-93E0-09D8B33AF855}.Debug|Win32.ActiveCfg = Debug|Win32
+		{F3742D07-E282-4890-93E0-09D8B33AF855}.Debug|Win32.Build.0 = Debug|Win32
+		{F3742D07-E282-4890-93E0-09D8B33AF855}.Debug|x64.ActiveCfg = Debug|x64
+		{F3742D07-E282-4890-93E0-09D8B33AF855}.Debug|x64.Build.0 = Debug|x64
+		{F3742D07-E282-4890-93E0-09D8B33AF855}.Release|Win32.ActiveCfg = Release|Win32
+		{F3742D07-E282-4890-93E0-09D8B33AF855}.Release|Win32.Build.0 = Release|Win32
+		{F3742D07-E282-4890-93E0-09D8B33AF855}.Release|x64.ActiveCfg = Release|x64
+		{F3742D07-E282-4890-93E0-09D8B33AF855}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
