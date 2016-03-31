@@ -374,7 +374,14 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 
 	stc = new wxStyledTextCtrl(splitter);
 
+	// Set default font attributes and tab width.  They should really be configurable.
+	wxFont stcFont = wxFont(wxFontInfo(10).Family(wxFONTFAMILY_TELETYPE));
+	stc->SetFont(stcFont);
+	stc->StyleSetFont(wxSTC_STYLE_DEFAULT, stcFont);
+	stc->SetTabWidth(4);
+
 	log = new wxTextCtrl(splitter, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE);
+	log->SetFont(stcFont);
 	splitter->SplitHorizontally(stc, log, 200);
 
 	cmd = new wxTextCtrl(this, ID_Command, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
