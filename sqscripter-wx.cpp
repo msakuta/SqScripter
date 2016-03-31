@@ -62,6 +62,7 @@ private:
 	void OnSave(wxCommandEvent& event);
 	void OnExit(wxCommandEvent& event);
 	void OnAbout(wxCommandEvent& event);
+	void OnEnterCmd(wxCommandEvent&);
 	wxDECLARE_EVENT_TABLE();
 
 	void SetLexer();
@@ -76,6 +77,7 @@ private:
 	wxStyledTextCtrl *stc;
 	wxTextCtrl *log;
 	wxLog *logger;
+	wxTextCtrl *cmd;
 	wxString fileName;
 	bool dirty;
 
@@ -88,7 +90,8 @@ enum
 {
 	ID_Run = 1,
 	ID_Open,
-	ID_Save
+	ID_Save,
+	ID_Command
 };
 
 
@@ -98,6 +101,7 @@ EVT_MENU(ID_Open,  SqScripterFrame::OnOpen)
 EVT_MENU(ID_Save,  SqScripterFrame::OnSave)
 EVT_MENU(wxID_EXIT,  SqScripterFrame::OnExit)
 EVT_MENU(wxID_ABOUT, SqScripterFrame::OnAbout)
+EVT_TEXT_ENTER(ID_Command, SqScripterFrame::OnEnterCmd)
 wxEND_EVENT_TABLE()
 
 
@@ -367,6 +371,13 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 
 	log = new wxTextCtrl(splitter, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE);
 	splitter->SplitHorizontally(stc, log, 200);
+
+	cmd = new wxTextCtrl(this, ID_Command, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
+	wxBoxSizer *sizer = new wxBoxSizer(wxVERTICAL);
+	sizer->Add(splitter, 1, wxEXPAND | wxALL);
+	sizer->Add(cmd, 0, wxEXPAND | wxBOTTOM);
+	SetSizer(sizer);
+
 	wxToolBar *toolbar = CreateToolBar();
 	wxBitmap bm = wxImage(wxT("../../run.png"));
 	toolbar->AddTool(ID_Run, "Run", bm, "Run the program");
@@ -545,12 +556,22 @@ void SqScripterFrame::OnAbout(wxCommandEvent& event)
 		"About SqScripter", wxOK | wxICON_INFORMATION );
 }
 
+void SqScripterFrame::OnEnterCmd(wxCommandEvent& event){
+	wxLog* oldLogger = wxLog::SetActiveTarget(logger);
+	wxStreamToTextRedirector redirect(log);
+	if(wxGetApp().handle && wxGetApp().handle->config.commandProc)
+		wxGetApp().handle->config.commandProc(cmd->GetValue());
+	else
+		wxLogMessage("Execute the command");
+	wxLog::SetActiveTarget(oldLogger);
+}
+
 void SqScripterFrame::OnRun(wxCommandEvent& event)
 {
 	wxLog* oldLogger = wxLog::SetActiveTarget(logger);
 	wxStreamToTextRedirector redirect(log);
-	if(wxGetApp().handle && wxGetApp().handle->config.commandProc)
-		wxGetApp().handle->config.commandProc(stc->GetText());
+	if(wxGetApp().handle && wxGetApp().handle->config.runProc)
+		wxGetApp().handle->config.runProc(fileName, stc->GetText());
 	else
 		wxLogMessage("Run the program");
 	wxLog::SetActiveTarget(oldLogger);
