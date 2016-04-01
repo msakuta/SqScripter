@@ -71,6 +71,7 @@ private:
 	void OnClear(wxCommandEvent& event);
 	void OnEnterCmd(wxCommandEvent&);
 	void OnPageChange(wxAuiNotebookEvent&);
+	void OnPageClose(wxAuiNotebookEvent&);
 	void OnSavePointReached(wxStyledTextEvent&);
 	wxDECLARE_EVENT_TABLE();
 
@@ -85,6 +86,12 @@ private:
 	void SetFileName(const wxString& fileName, bool dirty = false);
 	StyledFileTextCtrl *GetPage(size_t i){
 		wxWindow *w = note->GetPage(i);
+		if(!w)
+			return NULL;
+		return wxStaticCast(w, StyledFileTextCtrl);
+	}
+	StyledFileTextCtrl *GetCurrentPage(){
+		wxWindow *w = note->GetCurrentPage();
 		if(!w)
 			return NULL;
 		return wxStaticCast(w, StyledFileTextCtrl);
@@ -152,6 +159,7 @@ EVT_MENU(wxID_ABOUT, SqScripterFrame::OnAbout)
 EVT_CLOSE(SqScripterFrame::OnClose)
 EVT_TEXT_ENTER(ID_Command, SqScripterFrame::OnEnterCmd)
 EVT_AUINOTEBOOK_PAGE_CHANGED(ID_NoteBook, SqScripterFrame::OnPageChange)
+EVT_AUINOTEBOOK_PAGE_CLOSE(ID_NoteBook, SqScripterFrame::OnPageClose)
 EVT_STC_SAVEPOINTREACHED(wxID_ANY, SqScripterFrame::OnSavePointReached)
 EVT_STC_SAVEPOINTLEFT(wxID_ANY, SqScripterFrame::OnSavePointReached)
 wxEND_EVENT_TABLE()
@@ -621,10 +629,7 @@ void SqScripterFrame::LoadScriptFile(const wxString& fileName){
 }
 
 void SqScripterFrame::SaveScriptFile(const wxString& fileName){
-	wxWindow *w = note->GetCurrentPage();
-	if(!w)
-		return;
-	StyledFileTextCtrl *stc = wxStaticCast(w, StyledFileTextCtrl);
+	StyledFileTextCtrl *stc = GetCurrentPage();
 	if(!stc)
 		return;
 	wxFile hFile(fileName, wxFile::write);
@@ -636,16 +641,15 @@ void SqScripterFrame::SaveScriptFile(const wxString& fileName){
 		SetFileName(fileName); // Update the title string
 		stc->fileName = fileName; // Remember the file name for the next save operation
 		// Update the tab text
-		note->SetPageText(note->GetPageIndex(w), wxFileName(fileName).GetFullName());
+		note->SetPageText(note->GetPageIndex(stc), wxFileName(fileName).GetFullName());
 	}
 }
 
 
 void SqScripterFrame::UpdateTitle(){
 	wxString title = "Scripting Window ";
-	wxWindow *w = note->GetCurrentPage();
-	if(w){
-		StyledFileTextCtrl *stc = wxStaticCast(w, StyledFileTextCtrl);
+	StyledFileTextCtrl *stc = GetCurrentPage();
+	if(stc){
 		if(stc->dirty)
 			title += "* ";
 		if(!stc->fileName.empty())
@@ -746,7 +750,7 @@ void SqScripterFrame::OnOpen(wxCommandEvent& event)
 
 void SqScripterFrame::OnSave(wxCommandEvent& event)
 {
-	StyledFileTextCtrl *stc = wxStaticCast(note->GetCurrentPage(), StyledFileTextCtrl);
+	StyledFileTextCtrl *stc = GetCurrentPage();
 	ScripterWindowImpl *handle = wxGetApp().handle;
 	wxFileDialog openFileDialog(this, _("Save NUT file"), "", stc ? stc->fileName : "",
 		handle && handle->config.sourceFilters ? handle->config.sourceFilters : "Squirrel source files (*.nut)|*.nut", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
@@ -759,6 +763,13 @@ void SqScripterFrame::OnSave(wxCommandEvent& event)
 
 void SqScripterFrame::OnPageChange(wxAuiNotebookEvent& ){
 	UpdateTitle();
+}
+
+void SqScripterFrame::OnPageClose(wxAuiNotebookEvent& event){
+	StyledFileTextCtrl *stc = GetCurrentPage();
+	if(stc && stc->dirty && wxMessageBox(wxString("Changes to ") << stc->GetName() << " is not saved. OK to close?", "Scripting Window", wxOK | wxCANCEL) != wxOK){
+		event.Veto();
+	}
 }
 
 /// Update save point status (whether the document is dirty i.e. need to be saved before closing)
