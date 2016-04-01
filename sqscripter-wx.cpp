@@ -36,6 +36,7 @@ public:
 };
 
 class SqScripterFrame;
+class StyledFileTextCtrl;
 
 class SqScripterApp: public wxApp
 {
@@ -66,6 +67,7 @@ private:
 	void OnSave(wxCommandEvent& event);
 	void OnExit(wxCommandEvent& event);
 	void OnAbout(wxCommandEvent& event);
+	void OnClose(wxCloseEvent&);
 	void OnClear(wxCommandEvent& event);
 	void OnEnterCmd(wxCommandEvent&);
 	void OnPageChange(wxAuiNotebookEvent&);
@@ -81,6 +83,12 @@ private:
 	void SaveScriptFile(const wxString& fileName);
 	void UpdateTitle();
 	void SetFileName(const wxString& fileName, bool dirty = false);
+	StyledFileTextCtrl *GetPage(size_t i){
+		wxWindow *w = note->GetPage(i);
+		if(!w)
+			return NULL;
+		return wxStaticCast(w, StyledFileTextCtrl);
+	}
 
 	wxAuiNotebook *note;
 	wxFont stcFont;
@@ -104,10 +112,19 @@ private:
 /// always moves along with the page.
 class StyledFileTextCtrl : public wxStyledTextCtrl{
 public:
-	StyledFileTextCtrl(wxWindow *parent, const wxString &fileName) : wxStyledTextCtrl(parent), fileName(fileName), dirty(false){
+	StyledFileTextCtrl(wxWindow *parent, const wxString &fileName, int pageIndex = -1) :
+		wxStyledTextCtrl(parent), fileName(fileName), pageIndex(pageIndex), dirty(false){
+	}
+
+	wxString GetName()const{
+		if(fileName.empty())
+			return wxString("(New ") << pageIndex << ")";
+		else
+			return fileName;
 	}
 
 	wxString fileName;
+	int pageIndex; ///< For newly ceated, nameless buffers
 	bool dirty;
 };
 
@@ -132,6 +149,7 @@ EVT_MENU(ID_Save,  SqScripterFrame::OnSave)
 EVT_MENU(ID_Clear,  SqScripterFrame::OnClear)
 EVT_MENU(wxID_EXIT,  SqScripterFrame::OnExit)
 EVT_MENU(wxID_ABOUT, SqScripterFrame::OnAbout)
+EVT_CLOSE(SqScripterFrame::OnClose)
 EVT_TEXT_ENTER(ID_Command, SqScripterFrame::OnEnterCmd)
 EVT_AUINOTEBOOK_PAGE_CHANGED(ID_NoteBook, SqScripterFrame::OnPageChange)
 EVT_STC_SAVEPOINTREACHED(wxID_ANY, SqScripterFrame::OnSavePointReached)
@@ -446,10 +464,9 @@ void SqScripterFrame::SetLexer(){
 	lex = LexSquirrel;
 	wxWindowList stcList = GetChildren();
 	for(size_t i = 0; i < note->GetPageCount(); i++){
-		wxWindow *w = note->GetPage(i);
-		if(!w)
+		StyledFileTextCtrl *stc = GetPage(i);
+		if(!stc)
 			continue;
-		wxStyledTextCtrl *stc = wxStaticCast(w, wxStyledTextCtrl);
 		SetStcLexer(stc);
 	}
 }
@@ -566,8 +583,8 @@ void SqScripterFrame::LoadScriptFile(const wxString& fileName){
 	// Find a buffer with the same file name and select it instead of creating a new buffer.
 	int existingPage = -1;
 	for(int i = 0; i < note->GetPageCount(); i++){
-		StyledFileTextCtrl *stc = wxStaticCast(note->GetPage(i), StyledFileTextCtrl);
-		if(stc->fileName == fileName){
+		StyledFileTextCtrl *stc = GetPage(i);
+		if(stc && stc->fileName == fileName){
 			existingPage = i;
 			break;
 		}
@@ -585,7 +602,7 @@ void SqScripterFrame::LoadScriptFile(const wxString& fileName){
 				note->AddPage(stc, wxFileName(fileName).GetFullName(), true, 0);
 			}
 			else{
-				stc = wxStaticCast(note->GetPage(size_t(existingPage)), StyledFileTextCtrl);
+				stc = GetPage(size_t(existingPage));
 				note->SetSelection(size_t(existingPage));
 			}
 
@@ -655,6 +672,26 @@ void SqScripterFrame::OnAbout(wxCommandEvent& event)
 		"About SqScripter", wxOK | wxICON_INFORMATION );
 }
 
+void SqScripterFrame::OnClose(wxCloseEvent& event){
+	bool canceled = false;
+	// Confirm all dirty buffers before closing
+	for(size_t i = 0; i < note->GetPageCount(); i++){
+		StyledFileTextCtrl *stc = GetPage(i);
+		if(stc && stc->dirty && wxMessageBox(wxString("Changes to ") << stc->GetName() << " is not saved. OK to close?", "Scripting Window", wxOK | wxCANCEL) != wxOK){
+			canceled = true;
+			break;
+		}
+	}
+	if(!canceled){
+		ScripterWindowImpl *handle = wxGetApp().handle;
+		if(handle->config.onClose)
+			handle->config.onClose(handle);
+	}
+	else
+		event.Veto();
+}
+
+
 void SqScripterFrame::OnClear(wxCommandEvent& event){
 	log->Clear();
 }
@@ -689,7 +726,7 @@ void SqScripterFrame::OnRun(wxCommandEvent& event)
 
 void SqScripterFrame::OnNew(wxCommandEvent&)
 {
-	wxStyledTextCtrl *stc = new StyledFileTextCtrl(note, "");
+	wxStyledTextCtrl *stc = new StyledFileTextCtrl(note, "", pageIndexGenerator);
 	SetStcLexer(stc);
 	note->AddPage(stc, wxString("(New ") << pageIndexGenerator++ << ")", true, 0);
 	SetFileName("");
