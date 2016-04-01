@@ -413,20 +413,24 @@ void SqScripterApp::OnTerminate(wxThreadEvent&){
 }
 
 void SqScripterApp::OnSetLexer(wxThreadEvent&){
-	frame->SetLexer();
+	if(frame)
+		frame->SetLexer();
 }
 
 void SqScripterApp::OnAddError(wxThreadEvent& evt){
 	AddErrorEvent& ae = static_cast<AddErrorEvent&>(evt);
-	frame->AddError(ae);
+	if(frame)
+		frame->AddError(ae);
 }
 
 void SqScripterApp::OnClearError(wxThreadEvent&){
-	frame->ClearError();
+	if(frame)
+		frame->ClearError();
 }
 
 void SqScripterApp::OnPrint(wxThreadEvent& evt){
-	*frame->log << evt.GetString();
+	if(frame)
+		*frame->log << evt.GetString();
 }
 
 SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, const wxSize& size)
