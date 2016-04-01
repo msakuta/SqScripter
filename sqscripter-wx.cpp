@@ -41,7 +41,7 @@ class StyledFileTextCtrl;
 class SqScripterApp: public wxApp
 {
 public:
-	SqScripterApp() : handle(NULL){}
+	SqScripterApp() : frame(NULL), handle(NULL){}
 	virtual bool OnInit();
 	void OnShowWindow(wxThreadEvent& event);
 	void OnTerminate(wxThreadEvent&);
@@ -50,8 +50,11 @@ public:
 	void OnClearError(wxThreadEvent&);
 	void OnPrint(wxThreadEvent&);
 
+	wxBitmap LoadBitmap(const wxString& name);
+
 	SqScripterFrame *frame;
 	ScripterWindowImpl *handle;
+	wxString resourcePath;
 };
 
 
@@ -294,6 +297,13 @@ ScripterWindow *scripter_init(const ScripterConfig *sc){
 	return ret;
 }
 
+bool scripter_set_resource_path(ScripterWindow *, const char *path){
+	if(!wxTheApp)
+		return false; // Call scripter_init() first!
+	wxGetApp().resourcePath = path;
+	return true;
+}
+
 int scripter_show(ScripterWindow *){
 	// Send a message to wx thread to show a new frame:
 	wxThreadEvent *event =
@@ -336,10 +346,19 @@ wxIMPLEMENT_APP(SqScripterApp);
 #endif
 
 
+/// Try to load a file with given name from resource path.
+/// Also does some error handling for failure on loading image.
+wxBitmap SqScripterApp::LoadBitmap(const wxString& name){
+	wxImage im = wxFileName(resourcePath, name).GetFullPath();
+	if(im.IsOk())
+		return im;
+	else // Return a placeholder bitmap even if the image fails to load
+		return wxBitmap(32, 32);
+}
+
 bool SqScripterApp::OnInit()
 {
 	wxInitAllImageHandlers();
-	frame = new SqScripterFrame( "SqScripter", wxPoint(50, 50), wxSize(450, 540) );
 #ifdef _DLL
 	// Keep the wx "main" thread running even without windows. This greatly
 	// simplifies threads handling, because we don't have to correctly
@@ -374,15 +393,18 @@ bool SqScripterApp::OnInit()
 	Connect(CMD_PRINT,
 		wxEVT_THREAD,
 		wxThreadEventHandler(SqScripterApp::OnPrint));
-
-	frame->Show( false );
 #else
+	frame = new SqScripterFrame( "SqScripter", wxPoint(50, 50), wxSize(450, 540) );
 	frame->Show( true );
 #endif
 	return true;
 }
 
 void SqScripterApp::OnShowWindow(wxThreadEvent&){
+	// Postpone creation of the frame since the caller may call scripter_set_resource_path() after SqScripter::OnInit().
+	// The safe time to create is when the user of the library calls scripter_show().
+	if(!frame)
+		frame = new SqScripterFrame( "SqScripter", wxPoint(50, 50), wxSize(450, 540) );
 	frame->Show(true);
 }
 
@@ -450,13 +472,15 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	sizer->Add(cmd, 0, wxEXPAND | wxBOTTOM);
 	SetSizer(sizer);
 
+	SqScripterApp &app = wxGetApp();
+
 	wxToolBar *toolbar = CreateToolBar();
-	toolbar->AddTool(ID_Run, "Run", wxImage(wxT("../../run.png")), "Run the program");
-	toolbar->AddTool(ID_New, "New", wxImage(wxT("../../new.png")), "Create a new buffer");
-	toolbar->AddTool(ID_Open, "Open", wxImage(wxT("../../open.png")), "Open a file");
-	toolbar->AddTool(ID_Save, "Save", wxImage(wxT("../../save.png")), "Save a file");
-	toolbar->AddTool(ID_SaveAs, "SaveAs", wxImage(wxT("../../saveas.png")), "Save with a new name");
-	toolbar->AddTool(ID_Clear, "Clear", wxImage(wxT("../../clear.png")), "Clear output log");
+	toolbar->AddTool(ID_Run, "Run", app.LoadBitmap("run.png"), "Run the program");
+	toolbar->AddTool(ID_New, "New", app.LoadBitmap("new.png"), "Create a new buffer");
+	toolbar->AddTool(ID_Open, "Open", app.LoadBitmap("open.png"), "Open a file");
+	toolbar->AddTool(ID_Save, "Save", app.LoadBitmap("save.png"), "Save a file");
+	toolbar->AddTool(ID_SaveAs, "SaveAs", app.LoadBitmap("saveas.png"), "Save with a new name");
+	toolbar->AddTool(ID_Clear, "Clear", app.LoadBitmap("clear.png"), "Clear output log");
 	toolbar->Realize();
 	SetMenuBar( menuBar );
 	CreateStatusBar();
