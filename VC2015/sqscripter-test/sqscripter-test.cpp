@@ -109,6 +109,7 @@ int main(int argc, char *argv[])
 
 	// Initialize a Scripter window
 	sw = scripter_init(&sc);
+	scripter_set_resource_path(sw, "../..");
 
 	sq_setprintfunc(sqvm, SqPrintFunc, SqPrintFunc);
 	sq_newclosure(sqvm, SqError, 0);
