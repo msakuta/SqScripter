@@ -142,6 +142,7 @@ enum
 	ID_New,
 	ID_Open,
 	ID_Save,
+	ID_SaveAs,
 	ID_Clear,
 	ID_Command,
 	ID_NoteBook
@@ -153,6 +154,7 @@ EVT_MENU(ID_Run,   SqScripterFrame::OnRun)
 EVT_MENU(ID_New,  SqScripterFrame::OnNew)
 EVT_MENU(ID_Open,  SqScripterFrame::OnOpen)
 EVT_MENU(ID_Save,  SqScripterFrame::OnSave)
+EVT_MENU(ID_SaveAs,  SqScripterFrame::OnSave)
 EVT_MENU(ID_Clear,  SqScripterFrame::OnClear)
 EVT_MENU(wxID_EXIT,  SqScripterFrame::OnExit)
 EVT_MENU(wxID_ABOUT, SqScripterFrame::OnAbout)
@@ -415,6 +417,7 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	menuFile->Append(ID_New, "&New\tCtrl-N", "Create a new buffer");
 	menuFile->Append(ID_Open, "&Open\tCtrl-O", "Open a file");
 	menuFile->Append(ID_Save, "&Save\tCtrl-S", "Save and overwrite the file");
+	menuFile->Append(ID_SaveAs, "&Save As..\tCtrl-Shift-S", "Save to a file with a different name");
 	menuFile->AppendSeparator();
 	menuFile->Append(ID_Clear, "&Clear Log\tCtrl-C", "Clear output log");
 	menuFile->AppendSeparator();
@@ -448,11 +451,11 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	SetSizer(sizer);
 
 	wxToolBar *toolbar = CreateToolBar();
-	wxBitmap bm = wxImage(wxT("../../run.png"));
-	toolbar->AddTool(ID_Run, "Run", bm, "Run the program");
+	toolbar->AddTool(ID_Run, "Run", wxImage(wxT("../../run.png")), "Run the program");
 	toolbar->AddTool(ID_New, "New", wxImage(wxT("../../new.png")), "Create a new buffer");
 	toolbar->AddTool(ID_Open, "Open", wxImage(wxT("../../open.png")), "Open a file");
 	toolbar->AddTool(ID_Save, "Save", wxImage(wxT("../../save.png")), "Save a file");
+	toolbar->AddTool(ID_SaveAs, "SaveAs", wxImage(wxT("../../saveas.png")), "Save with a new name");
 	toolbar->AddTool(ID_Clear, "Clear", wxImage(wxT("../../clear.png")), "Clear output log");
 	toolbar->Realize();
 	SetMenuBar( menuBar );
@@ -755,10 +758,14 @@ void SqScripterFrame::OnSave(wxCommandEvent& event)
 	wxFileDialog openFileDialog(this, _("Save NUT file"), "", stc ? stc->fileName : "",
 		handle && handle->config.sourceFilters ? handle->config.sourceFilters : "Squirrel source files (*.nut)|*.nut", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
 
-	if (openFileDialog.ShowModal() == wxID_CANCEL)
-		return;
-
-	SaveScriptFile(openFileDialog.GetPath());
+	// Query a file name only if the buffer is a new buffer or the user selected "Save As..."
+	if(stc->fileName.empty() || event.GetId() == ID_SaveAs){
+		if (openFileDialog.ShowModal() == wxID_CANCEL)
+			return;
+		SaveScriptFile(openFileDialog.GetPath());
+	}
+	else
+		SaveScriptFile(stc->fileName);
 }
 
 void SqScripterFrame::OnPageChange(wxAuiNotebookEvent& ){
