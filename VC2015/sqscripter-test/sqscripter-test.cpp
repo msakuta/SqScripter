@@ -134,12 +134,12 @@ int main(int argc, char *argv[])
 	// Windows message loop
 	do{
 		MSG msg;
-		if(PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE)){
+//		if(PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE)){
 			if(GetMessage(&msg, NULL, 0, 0) <= 0)
 				break;
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
-		}
+//		}
 	}while (true);
 
 	sq_close(sqvm);
