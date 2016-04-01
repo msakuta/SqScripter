@@ -36,11 +36,12 @@ public:
 };
 
 class SqScripterFrame;
+class StyledFileTextCtrl;
 
 class SqScripterApp: public wxApp
 {
 public:
-	SqScripterApp() : handle(NULL){}
+	SqScripterApp() : frame(NULL), handle(NULL){}
 	virtual bool OnInit();
 	void OnShowWindow(wxThreadEvent& event);
 	void OnTerminate(wxThreadEvent&);
@@ -49,8 +50,11 @@ public:
 	void OnClearError(wxThreadEvent&);
 	void OnPrint(wxThreadEvent&);
 
+	wxBitmap LoadBitmap(const wxString& name);
+
 	SqScripterFrame *frame;
 	ScripterWindowImpl *handle;
+	wxString resourcePath;
 };
 
 
@@ -66,8 +70,12 @@ private:
 	void OnSave(wxCommandEvent& event);
 	void OnExit(wxCommandEvent& event);
 	void OnAbout(wxCommandEvent& event);
+	void OnClose(wxCloseEvent&);
 	void OnClear(wxCommandEvent& event);
 	void OnEnterCmd(wxCommandEvent&);
+	void OnPageChange(wxAuiNotebookEvent&);
+	void OnPageClose(wxAuiNotebookEvent&);
+	void OnSavePointReached(wxStyledTextEvent&);
 	wxDECLARE_EVENT_TABLE();
 
 	void SetLexer();
@@ -79,6 +87,18 @@ private:
 	void SaveScriptFile(const wxString& fileName);
 	void UpdateTitle();
 	void SetFileName(const wxString& fileName, bool dirty = false);
+	StyledFileTextCtrl *GetPage(size_t i){
+		wxWindow *w = note->GetPage(i);
+		if(!w)
+			return NULL;
+		return wxStaticCast(w, StyledFileTextCtrl);
+	}
+	StyledFileTextCtrl *GetCurrentPage(){
+		wxWindow *w = note->GetCurrentPage();
+		if(!w)
+			return NULL;
+		return wxStaticCast(w, StyledFileTextCtrl);
+	}
 
 	wxAuiNotebook *note;
 	wxFont stcFont;
@@ -93,6 +113,30 @@ private:
 	friend class SqScripterApp;
 };
 
+/// Inherit to create a new class for edit control only because we want to remember the name of file
+/// along with edit control.
+/// We could have a list of strings in the same order as the wxAuiNotebook's children, but wxAuiNotebook
+/// allow the user to change order or even close the pages with GUI, which makes tracking and synchronizing
+/// the order between two lists be so difficult.
+/// Inheriting and adding a member variable is one of the easiest ways to ensure that additional information
+/// always moves along with the page.
+class StyledFileTextCtrl : public wxStyledTextCtrl{
+public:
+	StyledFileTextCtrl(wxWindow *parent, const wxString &fileName, int pageIndex = -1) :
+		wxStyledTextCtrl(parent), fileName(fileName), pageIndex(pageIndex), dirty(false){
+	}
+
+	wxString GetName()const{
+		if(fileName.empty())
+			return wxString("(New ") << pageIndex << ")";
+		else
+			return fileName;
+	}
+
+	wxString fileName;
+	int pageIndex; ///< For newly ceated, nameless buffers
+	bool dirty;
+};
 
 
 enum
@@ -101,8 +145,10 @@ enum
 	ID_New,
 	ID_Open,
 	ID_Save,
+	ID_SaveAs,
 	ID_Clear,
-	ID_Command
+	ID_Command,
+	ID_NoteBook
 };
 
 
@@ -111,10 +157,16 @@ EVT_MENU(ID_Run,   SqScripterFrame::OnRun)
 EVT_MENU(ID_New,  SqScripterFrame::OnNew)
 EVT_MENU(ID_Open,  SqScripterFrame::OnOpen)
 EVT_MENU(ID_Save,  SqScripterFrame::OnSave)
+EVT_MENU(ID_SaveAs,  SqScripterFrame::OnSave)
 EVT_MENU(ID_Clear,  SqScripterFrame::OnClear)
 EVT_MENU(wxID_EXIT,  SqScripterFrame::OnExit)
 EVT_MENU(wxID_ABOUT, SqScripterFrame::OnAbout)
+EVT_CLOSE(SqScripterFrame::OnClose)
 EVT_TEXT_ENTER(ID_Command, SqScripterFrame::OnEnterCmd)
+EVT_AUINOTEBOOK_PAGE_CHANGED(ID_NoteBook, SqScripterFrame::OnPageChange)
+EVT_AUINOTEBOOK_PAGE_CLOSE(ID_NoteBook, SqScripterFrame::OnPageClose)
+EVT_STC_SAVEPOINTREACHED(wxID_ANY, SqScripterFrame::OnSavePointReached)
+EVT_STC_SAVEPOINTLEFT(wxID_ANY, SqScripterFrame::OnSavePointReached)
 wxEND_EVENT_TABLE()
 
 
@@ -245,13 +297,20 @@ ScripterWindow *scripter_init(const ScripterConfig *sc){
 	return ret;
 }
 
+bool scripter_set_resource_path(ScripterWindow *, const char *path){
+	if(!wxTheApp)
+		return false; // Call scripter_init() first!
+	wxGetApp().resourcePath = path;
+	return true;
+}
+
 int scripter_show(ScripterWindow *){
 	// Send a message to wx thread to show a new frame:
 	wxThreadEvent *event =
 		new wxThreadEvent(wxEVT_THREAD, CMD_SHOW_WINDOW);
 	wxQueueEvent(wxApp::GetInstance(), event);
 
-	return 1;
+	return 0;
 }
 
 int scripter_lexer_squirrel(ScripterWindow *){
@@ -260,7 +319,7 @@ int scripter_lexer_squirrel(ScripterWindow *){
 		new wxThreadEvent(wxEVT_THREAD, CMD_SETLEXER);
 	wxQueueEvent(wxApp::GetInstance(), event);
 
-	return 1;
+	return 0;
 }
 
 /// \brief Add a script error indicator to specified line in a specified source file.
@@ -287,10 +346,19 @@ wxIMPLEMENT_APP(SqScripterApp);
 #endif
 
 
+/// Try to load a file with given name from resource path.
+/// Also does some error handling for failure on loading image.
+wxBitmap SqScripterApp::LoadBitmap(const wxString& name){
+	wxImage im = wxFileName(resourcePath, name).GetFullPath();
+	if(im.IsOk())
+		return im;
+	else // Return a placeholder bitmap even if the image fails to load
+		return wxBitmap(32, 32);
+}
+
 bool SqScripterApp::OnInit()
 {
 	wxInitAllImageHandlers();
-	frame = new SqScripterFrame( "SqScripter", wxPoint(50, 50), wxSize(450, 540) );
 #ifdef _DLL
 	// Keep the wx "main" thread running even without windows. This greatly
 	// simplifies threads handling, because we don't have to correctly
@@ -325,15 +393,18 @@ bool SqScripterApp::OnInit()
 	Connect(CMD_PRINT,
 		wxEVT_THREAD,
 		wxThreadEventHandler(SqScripterApp::OnPrint));
-
-	frame->Show( false );
 #else
+	frame = new SqScripterFrame( "SqScripter", wxPoint(50, 50), wxSize(450, 540) );
 	frame->Show( true );
 #endif
 	return true;
 }
 
 void SqScripterApp::OnShowWindow(wxThreadEvent&){
+	// Postpone creation of the frame since the caller may call scripter_set_resource_path() after SqScripter::OnInit().
+	// The safe time to create is when the user of the library calls scripter_show().
+	if(!frame)
+		frame = new SqScripterFrame( "SqScripter", wxPoint(50, 50), wxSize(450, 540) );
 	frame->Show(true);
 }
 
@@ -368,6 +439,7 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	menuFile->Append(ID_New, "&New\tCtrl-N", "Create a new buffer");
 	menuFile->Append(ID_Open, "&Open\tCtrl-O", "Open a file");
 	menuFile->Append(ID_Save, "&Save\tCtrl-S", "Save and overwrite the file");
+	menuFile->Append(ID_SaveAs, "&Save As..\tCtrl-Shift-S", "Save to a file with a different name");
 	menuFile->AppendSeparator();
 	menuFile->Append(ID_Clear, "&Clear Log\tCtrl-C", "Clear output log");
 	menuFile->AppendSeparator();
@@ -383,7 +455,7 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	splitter->SetSashGravity(0.75);
 	splitter->SetMinimumPaneSize(40);
 
-	note = new wxAuiNotebook(splitter);
+	note = new wxAuiNotebook(splitter, ID_NoteBook);
 
 	// Set default font attributes and tab width.  They should really be configurable.
 	stcFont = wxFont(wxFontInfo(10).Family(wxFONTFAMILY_TELETYPE));
@@ -400,13 +472,15 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	sizer->Add(cmd, 0, wxEXPAND | wxBOTTOM);
 	SetSizer(sizer);
 
+	SqScripterApp &app = wxGetApp();
+
 	wxToolBar *toolbar = CreateToolBar();
-	wxBitmap bm = wxImage(wxT("../../run.png"));
-	toolbar->AddTool(ID_Run, "Run", bm, "Run the program");
-	toolbar->AddTool(ID_New, "New", wxImage(wxT("../../new.png")), "Create a new buffer");
-	toolbar->AddTool(ID_Open, "Open", wxImage(wxT("../../open.png")), "Open a file");
-	toolbar->AddTool(ID_Save, "Save", wxImage(wxT("../../save.png")), "Save a file");
-	toolbar->AddTool(ID_Clear, "Clear", wxImage(wxT("../../clear.png")), "Clear output log");
+	toolbar->AddTool(ID_Run, "Run", app.LoadBitmap("run.png"), "Run the program");
+	toolbar->AddTool(ID_New, "New", app.LoadBitmap("new.png"), "Create a new buffer");
+	toolbar->AddTool(ID_Open, "Open", app.LoadBitmap("open.png"), "Open a file");
+	toolbar->AddTool(ID_Save, "Save", app.LoadBitmap("save.png"), "Save a file");
+	toolbar->AddTool(ID_SaveAs, "SaveAs", app.LoadBitmap("saveas.png"), "Save with a new name");
+	toolbar->AddTool(ID_Clear, "Clear", app.LoadBitmap("clear.png"), "Clear output log");
 	toolbar->Realize();
 	SetMenuBar( menuBar );
 	CreateStatusBar();
@@ -425,10 +499,9 @@ void SqScripterFrame::SetLexer(){
 	lex = LexSquirrel;
 	wxWindowList stcList = GetChildren();
 	for(size_t i = 0; i < note->GetPageCount(); i++){
-		wxWindow *w = note->GetPage(i);
-		if(!w)
+		StyledFileTextCtrl *stc = GetPage(i);
+		if(!stc)
 			continue;
-		wxStyledTextCtrl *stc = wxStaticCast(w, wxStyledTextCtrl);
 		SetStcLexer(stc);
 	}
 }
@@ -542,31 +615,48 @@ void SqScripterFrame::LoadScriptFile(const wxString& fileName){
 		return;
 	}
 
+	// Find a buffer with the same file name and select it instead of creating a new buffer.
+	int existingPage = -1;
+	for(int i = 0; i < note->GetPageCount(); i++){
+		StyledFileTextCtrl *stc = GetPage(i);
+		if(stc && stc->fileName == fileName){
+			existingPage = i;
+			break;
+		}
+	}
+
 	wxFile file(fileName, wxFile::read);
 	if(file.IsOpened()){
 		wxString str;
 		if(file.ReadAll(&str)){
-			wxStyledTextCtrl *stc = new wxStyledTextCtrl(note);
-			SetStcLexer(stc);
+			wxStyledTextCtrl *stc;
+			if(existingPage < 0){
+				stc = new StyledFileTextCtrl(note, fileName);
+				SetStcLexer(stc);
+
+				note->AddPage(stc, wxFileName(fileName).GetFullName(), true, 0);
+			}
+			else{
+				stc = GetPage(size_t(existingPage));
+				note->SetSelection(size_t(existingPage));
+			}
+
 			stc->SetText(str);
 
 			// Clear undo buffer instead of setting a savepoint because we don't want to undo to empty document
 			// if it's opened from a file.
 			stc->EmptyUndoBuffer();
+			// For some reason, emptying the undo buffer does not trigger the savepoint reached event, so
+			// we have to manually invoke it.
+			stc->SetSavePoint();
 
-			note->AddPage(stc, wxFileName(fileName).GetFullName(), true, 0);
-
-			SetFileName(fileName);
 			RecalcLineNumberWidth();
 		}
 	}
 }
 
 void SqScripterFrame::SaveScriptFile(const wxString& fileName){
-	wxWindow *w = note->GetCurrentPage();
-	if(!w)
-		return;
-	wxStyledTextCtrl *stc = static_cast<wxStyledTextCtrl*>(w);
+	StyledFileTextCtrl *stc = GetCurrentPage();
 	if(!stc)
 		return;
 	wxFile hFile(fileName, wxFile::write);
@@ -575,13 +665,23 @@ void SqScripterFrame::SaveScriptFile(const wxString& fileName){
 		hFile.Write(text);
 		// Set savepoint for buffer dirtiness management
 		stc->SetSavePoint();
-		SetFileName(fileName); // Remember the file name for the next save operation
+		SetFileName(fileName); // Update the title string
+		stc->fileName = fileName; // Remember the file name for the next save operation
+		// Update the tab text
+		note->SetPageText(note->GetPageIndex(stc), wxFileName(fileName).GetFullName());
 	}
 }
 
 
 void SqScripterFrame::UpdateTitle(){
-	wxString title = "Scripting Window " + fileName;
+	wxString title = "Scripting Window ";
+	StyledFileTextCtrl *stc = GetCurrentPage();
+	if(stc){
+		if(stc->dirty)
+			title += "* ";
+		if(!stc->fileName.empty())
+			title += "(" + stc->fileName + ")";
+	}
 	SetTitle(title);
 }
 
@@ -602,6 +702,26 @@ void SqScripterFrame::OnAbout(wxCommandEvent& event)
 	wxMessageBox( "SqScripter powered by wxWidgets & Scintilla",
 		"About SqScripter", wxOK | wxICON_INFORMATION );
 }
+
+void SqScripterFrame::OnClose(wxCloseEvent& event){
+	bool canceled = false;
+	// Confirm all dirty buffers before closing
+	for(size_t i = 0; i < note->GetPageCount(); i++){
+		StyledFileTextCtrl *stc = GetPage(i);
+		if(stc && stc->dirty && wxMessageBox(wxString("Changes to ") << stc->GetName() << " is not saved. OK to close?", "Scripting Window", wxOK | wxCANCEL) != wxOK){
+			canceled = true;
+			break;
+		}
+	}
+	if(!canceled){
+		ScripterWindowImpl *handle = wxGetApp().handle;
+		if(handle->config.onClose)
+			handle->config.onClose(handle);
+	}
+	else
+		event.Veto();
+}
+
 
 void SqScripterFrame::OnClear(wxCommandEvent& event){
 	log->Clear();
@@ -637,7 +757,7 @@ void SqScripterFrame::OnRun(wxCommandEvent& event)
 
 void SqScripterFrame::OnNew(wxCommandEvent&)
 {
-	wxStyledTextCtrl *stc = new wxStyledTextCtrl(note);
+	wxStyledTextCtrl *stc = new StyledFileTextCtrl(note, "", pageIndexGenerator);
 	SetStcLexer(stc);
 	note->AddPage(stc, wxString("(New ") << pageIndexGenerator++ << ")", true, 0);
 	SetFileName("");
@@ -657,12 +777,46 @@ void SqScripterFrame::OnOpen(wxCommandEvent& event)
 
 void SqScripterFrame::OnSave(wxCommandEvent& event)
 {
+	StyledFileTextCtrl *stc = GetCurrentPage();
 	ScripterWindowImpl *handle = wxGetApp().handle;
-	wxFileDialog openFileDialog(this, _("Save NUT file"), "", "",
+	wxFileDialog openFileDialog(this, _("Save NUT file"), "", stc ? stc->fileName : "",
 		handle && handle->config.sourceFilters ? handle->config.sourceFilters : "Squirrel source files (*.nut)|*.nut", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
 
-	if (openFileDialog.ShowModal() == wxID_CANCEL)
-		return;
+	// Query a file name only if the buffer is a new buffer or the user selected "Save As..."
+	if(stc->fileName.empty() || event.GetId() == ID_SaveAs){
+		if (openFileDialog.ShowModal() == wxID_CANCEL)
+			return;
+		SaveScriptFile(openFileDialog.GetPath());
+	}
+	else
+		SaveScriptFile(stc->fileName);
+}
 
-	SaveScriptFile(openFileDialog.GetPath());
+void SqScripterFrame::OnPageChange(wxAuiNotebookEvent& ){
+	UpdateTitle();
+}
+
+void SqScripterFrame::OnPageClose(wxAuiNotebookEvent& event){
+	StyledFileTextCtrl *stc = GetCurrentPage();
+	if(stc && stc->dirty && wxMessageBox(wxString("Changes to ") << stc->GetName() << " is not saved. OK to close?", "Scripting Window", wxOK | wxCANCEL) != wxOK){
+		event.Veto();
+	}
+}
+
+/// Update save point status (whether the document is dirty i.e. need to be saved before closing)
+void SqScripterFrame::OnSavePointReached(wxStyledTextEvent& event){
+	// This event handler is shared among "reached" and "left" events, so
+	// query the event type and change the title accordingly.
+	bool reached = event.GetEventType() == wxEVT_STC_SAVEPOINTREACHED;
+	StyledFileTextCtrl *stc = wxStaticCast(event.GetEventObject(), StyledFileTextCtrl);
+	stc->dirty = !reached;
+
+	wxWindow *w = note->GetCurrentPage();
+	// Sometimes controls in hidden pages can send the event, but we do not want to update
+	// the main window title by events from them, so update only if the event is sent from current page.
+	// Note that StyledText controls have indeterminant IDs (wxID_ANY) because there can be arbitrary
+	// number of controls, so we cannot rely on them.
+	if(w && w == stc){
+		UpdateTitle();
+	}
 }
