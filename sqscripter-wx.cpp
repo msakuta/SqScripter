@@ -68,6 +68,8 @@ private:
 	void OnAbout(wxCommandEvent& event);
 	void OnClear(wxCommandEvent& event);
 	void OnEnterCmd(wxCommandEvent&);
+	void OnPageChange(wxAuiNotebookEvent&);
+	void OnSavePointReached(wxStyledTextEvent&);
 	wxDECLARE_EVENT_TABLE();
 
 	void SetLexer();
@@ -102,10 +104,11 @@ private:
 /// always moves along with the page.
 class StyledFileTextCtrl : public wxStyledTextCtrl{
 public:
-	StyledFileTextCtrl(wxWindow *parent, const wxString &fileName) : wxStyledTextCtrl(parent), fileName(fileName){
+	StyledFileTextCtrl(wxWindow *parent, const wxString &fileName) : wxStyledTextCtrl(parent), fileName(fileName), dirty(false){
 	}
 
 	wxString fileName;
+	bool dirty;
 };
 
 
@@ -116,7 +119,8 @@ enum
 	ID_Open,
 	ID_Save,
 	ID_Clear,
-	ID_Command
+	ID_Command,
+	ID_NoteBook
 };
 
 
@@ -129,6 +133,9 @@ EVT_MENU(ID_Clear,  SqScripterFrame::OnClear)
 EVT_MENU(wxID_EXIT,  SqScripterFrame::OnExit)
 EVT_MENU(wxID_ABOUT, SqScripterFrame::OnAbout)
 EVT_TEXT_ENTER(ID_Command, SqScripterFrame::OnEnterCmd)
+EVT_AUINOTEBOOK_PAGE_CHANGED(ID_NoteBook, SqScripterFrame::OnPageChange)
+EVT_STC_SAVEPOINTREACHED(wxID_ANY, SqScripterFrame::OnSavePointReached)
+EVT_STC_SAVEPOINTLEFT(wxID_ANY, SqScripterFrame::OnSavePointReached)
 wxEND_EVENT_TABLE()
 
 
@@ -397,7 +404,7 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	splitter->SetSashGravity(0.75);
 	splitter->SetMinimumPaneSize(40);
 
-	note = new wxAuiNotebook(splitter);
+	note = new wxAuiNotebook(splitter, ID_NoteBook);
 
 	// Set default font attributes and tab width.  They should really be configurable.
 	stcFont = wxFont(wxFontInfo(10).Family(wxFONTFAMILY_TELETYPE));
@@ -587,8 +594,10 @@ void SqScripterFrame::LoadScriptFile(const wxString& fileName){
 			// Clear undo buffer instead of setting a savepoint because we don't want to undo to empty document
 			// if it's opened from a file.
 			stc->EmptyUndoBuffer();
+			// For some reason, emptying the undo buffer does not trigger the savepoint reached event, so
+			// we have to manually invoke it.
+			stc->SetSavePoint();
 
-			SetFileName(fileName);
 			RecalcLineNumberWidth();
 		}
 	}
@@ -616,7 +625,15 @@ void SqScripterFrame::SaveScriptFile(const wxString& fileName){
 
 
 void SqScripterFrame::UpdateTitle(){
-	wxString title = "Scripting Window " + fileName;
+	wxString title = "Scripting Window ";
+	wxWindow *w = note->GetCurrentPage();
+	if(w){
+		StyledFileTextCtrl *stc = wxStaticCast(w, StyledFileTextCtrl);
+		if(stc->dirty)
+			title += "* ";
+		if(!stc->fileName.empty())
+			title += "(" + stc->fileName + ")";
+	}
 	SetTitle(title);
 }
 
@@ -701,4 +718,26 @@ void SqScripterFrame::OnSave(wxCommandEvent& event)
 		return;
 
 	SaveScriptFile(openFileDialog.GetPath());
+}
+
+void SqScripterFrame::OnPageChange(wxAuiNotebookEvent& ){
+	UpdateTitle();
+}
+
+/// Update save point status (whether the document is dirty i.e. need to be saved before closing)
+void SqScripterFrame::OnSavePointReached(wxStyledTextEvent& event){
+	// This event handler is shared among "reached" and "left" events, so
+	// query the event type and change the title accordingly.
+	bool reached = event.GetEventType() == wxEVT_STC_SAVEPOINTREACHED;
+	StyledFileTextCtrl *stc = wxStaticCast(event.GetEventObject(), StyledFileTextCtrl);
+	stc->dirty = !reached;
+
+	wxWindow *w = note->GetCurrentPage();
+	// Sometimes controls in hidden pages can send the event, but we do not want to update
+	// the main window title by events from them, so update only if the event is sent from current page.
+	// Note that StyledText controls have indeterminant IDs (wxID_ANY) because there can be arbitrary
+	// number of controls, so we cannot rely on them.
+	if(w && w == stc){
+		UpdateTitle();
+	}
 }
