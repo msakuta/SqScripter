@@ -73,6 +73,7 @@ private:
 	void OnClose(wxCloseEvent&);
 	void OnClear(wxCommandEvent& event);
 	void OnEnterCmd(wxCommandEvent&);
+	void OnCmdChar(wxKeyEvent&);
 	void OnPageChange(wxAuiNotebookEvent&);
 	void OnPageClose(wxAuiNotebookEvent&);
 	void OnSavePointReached(wxStyledTextEvent&);
@@ -106,6 +107,11 @@ private:
 	wxLog *logger;
 	wxTextCtrl *cmd;
 	wxString fileName;
+
+	/// Command history buffer
+	wxArrayString cmdHistory; // wxArrayString is (hopefully) more efficient than std::vector<wxString> or such.
+	int currentHistory;
+
 	enum{LexUnknown, LexSquirrel} lex;
 	int pageIndexGenerator;
 	bool dirty;
@@ -471,6 +477,7 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	splitter->SplitHorizontally(note, log, 200);
 
 	cmd = new wxTextCtrl(this, ID_Command, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
+	cmd->Bind(wxEVT_CHAR_HOOK, &SqScripterFrame::OnCmdChar, this);
 	wxBoxSizer *sizer = new wxBoxSizer(wxVERTICAL);
 	sizer->Add(splitter, 1, wxEXPAND | wxALL);
 	sizer->Add(cmd, 0, wxEXPAND | wxBOTTOM);
@@ -734,11 +741,35 @@ void SqScripterFrame::OnClear(wxCommandEvent& event){
 void SqScripterFrame::OnEnterCmd(wxCommandEvent& event){
 	wxLog* oldLogger = wxLog::SetActiveTarget(logger);
 	wxStreamToTextRedirector redirect(log);
+	wxString cmdStr = cmd->GetValue();
 	if(wxGetApp().handle && wxGetApp().handle->config.commandProc)
-		wxGetApp().handle->config.commandProc(cmd->GetValue());
+		wxGetApp().handle->config.commandProc(cmdStr);
 	else
-		wxLogMessage("Execute the command");
+		wxLogMessage("Execute the command: " + cmdStr + "\n");
+	// Remember issued command in the history buffer only if the command is not repeated.
+	if(cmdHistory.empty() || cmdHistory.back() != cmdStr){
+		cmdHistory.push_back(cmdStr);
+		currentHistory = -1;
+	}
+	cmd->Clear();
 	wxLog::SetActiveTarget(oldLogger);
+}
+
+/// Event handler for Command line control character input.
+void SqScripterFrame::OnCmdChar(wxKeyEvent& event){
+	if(event.GetEventObject() == cmd){
+		if((event.GetKeyCode() == WXK_DOWN || event.GetKeyCode() == WXK_UP) && cmdHistory.size() != 0){
+			if(currentHistory == -1)
+				currentHistory = (int)cmdHistory.size() - 1;
+			else
+				currentHistory = (int)(currentHistory + (event.GetKeyCode() == WXK_DOWN ? -1 : 1) + cmdHistory.size()) % cmdHistory.size();
+			cmd->SetValue(cmdHistory[currentHistory]);
+			// Set the caret to the end, because DOS or ssh command line users usually expect this behavior.
+			cmd->SetInsertionPointEnd();
+			return; // Return without skipping
+		}
+	}
+	event.Skip();
 }
 
 void SqScripterFrame::OnRun(wxCommandEvent& event)
