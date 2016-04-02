@@ -66,6 +66,7 @@ static void SqPrintFunc(HSQUIRRELVM v, const SQChar *s, ...){
 	va_start(vl, s);
 	char buf[2048];
 	vsprintf_s(buf, s, vl);
+	strcat_s(buf, "\n"); // Add line break
 	PrintProc(sw, buf);
 	va_end(vl);
 }
