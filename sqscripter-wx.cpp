@@ -73,6 +73,7 @@ private:
 	void OnClose(wxCloseEvent&);
 	void OnClear(wxCommandEvent& event);
 	void OnWhiteSpaces(wxCommandEvent&);
+	void OnLineNumbers(wxCommandEvent&);
 	void OnEnterCmd(wxCommandEvent&);
 	void OnCmdChar(wxKeyEvent&);
 	void OnPageChange(wxAuiNotebookEvent&);
@@ -84,7 +85,7 @@ private:
 	void SetStcLexer(wxStyledTextCtrl *stc);
 	void AddError(AddErrorEvent&);
 	void ClearError();
-	void RecalcLineNumberWidth();
+	void RecalcLineNumberWidth(int pageIndex = -1);
 	void LoadScriptFile(const wxString& fileName);
 	void SaveScriptFile(const wxString& fileName);
 	void UpdateTitle();
@@ -155,6 +156,7 @@ enum
 	ID_SaveAs,
 	ID_Clear,
 	ID_WhiteSpaces,
+	ID_LineNumbers,
 	ID_Command,
 	ID_NoteBook
 };
@@ -168,6 +170,7 @@ EVT_MENU(ID_Save,  SqScripterFrame::OnSave)
 EVT_MENU(ID_SaveAs,  SqScripterFrame::OnSave)
 EVT_MENU(ID_Clear,  SqScripterFrame::OnClear)
 EVT_MENU(ID_WhiteSpaces, SqScripterFrame::OnWhiteSpaces)
+EVT_MENU(ID_LineNumbers, SqScripterFrame::OnLineNumbers)
 EVT_MENU(wxID_EXIT,  SqScripterFrame::OnExit)
 EVT_MENU(wxID_ABOUT, SqScripterFrame::OnAbout)
 EVT_CLOSE(SqScripterFrame::OnClose)
@@ -458,7 +461,9 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	menuFile->AppendSeparator();
 	menuFile->Append(wxID_EXIT);
 	wxMenu *menuView = new wxMenu;
-	menuView->Append(ID_WhiteSpaces, "Toggle Whitespaces\tCtrl-W", "Toggles show state of whitespaces", wxITEM_CHECK);
+	menuView->AppendCheckItem(ID_WhiteSpaces, "Toggle Whitespaces\tCtrl-W", "Toggles show state of whitespaces");
+	menuView->AppendCheckItem(ID_LineNumbers, "Toggle Line Numbers\tCtrl-L", "Toggles show state of line numbers");
+	menuView->Check(ID_LineNumbers, true); // Default is true
 	wxMenu *menuHelp = new wxMenu;
 	menuHelp->Append(wxID_ABOUT);
 	wxMenuBar *menuBar = new wxMenuBar;
@@ -600,26 +605,23 @@ void SqScripterFrame::ClearError(){
 }
 
 /// Calculate width of line numbers margin by contents
-void SqScripterFrame::RecalcLineNumberWidth(){
-	wxWindow *w = note->GetCurrentPage();
-	if(!w)
+void SqScripterFrame::RecalcLineNumberWidth(int pageIndex){
+	StyledFileTextCtrl *stc = pageIndex < 0 ? GetCurrentPage() : GetPage(pageIndex);
+	if(!stc)
 		return;
-	wxStyledTextCtrl *stc = static_cast<wxStyledTextCtrl*>(w);
-	{
-		bool showState = true;//(GetMenuState(GetMenu(hDlg), IDM_LINENUMBERS, MF_BYCOMMAND) & MF_CHECKED) != 0;
+	bool showState = GetMenuBar()->IsChecked(ID_LineNumbers);
 
-		// Make sure to set type of the first margin to be line numbers
-		stc->SetMarginType(0, wxSTC_MARGIN_NUMBER);
+	// Make sure to set type of the first margin to be line numbers
+	stc->SetMarginType(0, wxSTC_MARGIN_NUMBER);
 
-		// Obtain width needed to display all line count in the buffer
-		int lineCount = stc->GetLineCount();
-		wxString lineText = "_";
-		for(int i = 0; pow(10, i) <= lineCount; i++)
-			lineText += "9";
+	// Obtain width needed to display all line count in the buffer
+	int lineCount = stc->GetLineCount();
+	wxString lineText = "_";
+	for(int i = 0; pow(10, i) <= lineCount; i++)
+		lineText += "9";
 
-		int width = showState ? stc->TextWidth(wxSTC_STYLE_LINENUMBER, lineText) : 0;
-		stc->SetMarginWidth(0, width);
-	}
+	int width = showState ? stc->TextWidth(wxSTC_STYLE_LINENUMBER, lineText) : 0;
+	stc->SetMarginWidth(0, width);
 }
 
 void SqScripterFrame::LoadScriptFile(const wxString& fileName){
@@ -752,6 +754,12 @@ void SqScripterFrame::OnWhiteSpaces(wxCommandEvent& event){
 	}
 }
 
+void SqScripterFrame::OnLineNumbers(wxCommandEvent& event){
+	// Update all editor control in all pages
+	for(int i = 0; i < note->GetPageCount(); i++)
+		RecalcLineNumberWidth(i);
+}
+
 void SqScripterFrame::OnEnterCmd(wxCommandEvent& event){
 	wxLog* oldLogger = wxLog::SetActiveTarget(logger);
 	wxStreamToTextRedirector redirect(log);
@@ -810,6 +818,7 @@ void SqScripterFrame::OnNew(wxCommandEvent&)
 	SetStcLexer(stc);
 	note->AddPage(stc, wxString("(New ") << pageIndexGenerator++ << ")", true, 0);
 	SetFileName("");
+	RecalcLineNumberWidth();
 }
 
 void SqScripterFrame::OnOpen(wxCommandEvent& event)
