@@ -23,13 +23,16 @@ function jsonize(obj)
        
     case "array":
         str = " [ ";
+        local first = true;
         foreach (element in obj)
         {
             local str2 = jsonize(element);
             if (str2 == null)
                 return null;
-            str += str2 + ", ";
-       
+            if(!first)
+                str += ", ";
+            str += str2;
+            first = false;
         }
        
         str += "] ";
@@ -37,6 +40,7 @@ function jsonize(obj)
        
     case "table":
         str = " { ";
+        local first = true;
         foreach (key, value in obj)
         {
             local key_string = jsonize(key);
@@ -45,7 +49,10 @@ function jsonize(obj)
             local value_string = jsonize(value);
             if (value_string == null)
                 return null;
-            str += key_string + ": " + value_string + ",";
+            if (!first)
+                str += ", ";
+            str += key_string + ": " + value_string;
+            first = false;
         }
         str += " } ";
         return str;
