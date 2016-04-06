@@ -457,7 +457,7 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	menuFile->Append(ID_Save, "&Save\tCtrl-S", "Save and overwrite the file");
 	menuFile->Append(ID_SaveAs, "&Save As..\tCtrl-Shift-S", "Save to a file with a different name");
 	menuFile->AppendSeparator();
-	menuFile->Append(ID_Clear, "&Clear Log\tCtrl-C", "Clear output log");
+	menuFile->Append(ID_Clear, "&Clear Log\tCtrl-K", "Clear output log");
 	menuFile->AppendSeparator();
 	menuFile->Append(wxID_EXIT);
 	wxMenu *menuView = new wxMenu;
