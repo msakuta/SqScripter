@@ -72,7 +72,14 @@ private:
 	void OnAbout(wxCommandEvent& event);
 	void OnClose(wxCloseEvent&);
 	void OnClear(wxCommandEvent& event);
+	void OnShowSearch(wxCommandEvent&);
+	void OnShowLog(wxCommandEvent&);
+	void OnShowCmd(wxCommandEvent&);
+	void OnWhiteSpaces(wxCommandEvent&);
+	void OnLineNumbers(wxCommandEvent&);
+	void OnSearchGo(wxCommandEvent&);
 	void OnEnterCmd(wxCommandEvent&);
+	void OnCmdChar(wxKeyEvent&);
 	void OnPageChange(wxAuiNotebookEvent&);
 	void OnPageClose(wxAuiNotebookEvent&);
 	void OnSavePointReached(wxStyledTextEvent&);
@@ -82,7 +89,7 @@ private:
 	void SetStcLexer(wxStyledTextCtrl *stc);
 	void AddError(AddErrorEvent&);
 	void ClearError();
-	void RecalcLineNumberWidth();
+	void RecalcLineNumberWidth(int pageIndex = -1);
 	void LoadScriptFile(const wxString& fileName);
 	void SaveScriptFile(const wxString& fileName);
 	void UpdateTitle();
@@ -100,12 +107,18 @@ private:
 		return wxStaticCast(w, StyledFileTextCtrl);
 	}
 
+	wxSplitterWindow *splitter;
 	wxAuiNotebook *note;
 	wxFont stcFont;
 	wxTextCtrl *log;
 	wxLog *logger;
 	wxTextCtrl *cmd;
 	wxString fileName;
+
+	/// Command history buffer
+	wxArrayString cmdHistory; // wxArrayString is (hopefully) more efficient than std::vector<wxString> or such.
+	int currentHistory;
+
 	enum{LexUnknown, LexSquirrel} lex;
 	int pageIndexGenerator;
 	bool dirty;
@@ -147,6 +160,14 @@ enum
 	ID_Save,
 	ID_SaveAs,
 	ID_Clear,
+	ID_ShowSearch,
+	ID_ShowLog,
+	ID_ShowCmd,
+	ID_WhiteSpaces,
+	ID_LineNumbers,
+	ID_SearchPanel,
+	ID_SearchText,
+	ID_SearchGo,
 	ID_Command,
 	ID_NoteBook
 };
@@ -159,9 +180,16 @@ EVT_MENU(ID_Open,  SqScripterFrame::OnOpen)
 EVT_MENU(ID_Save,  SqScripterFrame::OnSave)
 EVT_MENU(ID_SaveAs,  SqScripterFrame::OnSave)
 EVT_MENU(ID_Clear,  SqScripterFrame::OnClear)
+EVT_MENU(ID_ShowSearch, SqScripterFrame::OnShowSearch)
+EVT_MENU(ID_ShowLog, SqScripterFrame::OnShowLog)
+EVT_MENU(ID_ShowCmd, SqScripterFrame::OnShowCmd)
+EVT_MENU(ID_WhiteSpaces, SqScripterFrame::OnWhiteSpaces)
+EVT_MENU(ID_LineNumbers, SqScripterFrame::OnLineNumbers)
 EVT_MENU(wxID_EXIT,  SqScripterFrame::OnExit)
 EVT_MENU(wxID_ABOUT, SqScripterFrame::OnAbout)
+EVT_BUTTON(ID_SearchGo, SqScripterFrame::OnSearchGo)
 EVT_CLOSE(SqScripterFrame::OnClose)
+EVT_TEXT_ENTER(ID_SearchText, SqScripterFrame::OnSearchGo)
 EVT_TEXT_ENTER(ID_Command, SqScripterFrame::OnEnterCmd)
 EVT_AUINOTEBOOK_PAGE_CHANGED(ID_NoteBook, SqScripterFrame::OnPageChange)
 EVT_AUINOTEBOOK_PAGE_CLOSE(ID_NoteBook, SqScripterFrame::OnPageClose)
@@ -413,20 +441,24 @@ void SqScripterApp::OnTerminate(wxThreadEvent&){
 }
 
 void SqScripterApp::OnSetLexer(wxThreadEvent&){
-	frame->SetLexer();
+	if(frame)
+		frame->SetLexer();
 }
 
 void SqScripterApp::OnAddError(wxThreadEvent& evt){
 	AddErrorEvent& ae = static_cast<AddErrorEvent&>(evt);
-	frame->AddError(ae);
+	if(frame)
+		frame->AddError(ae);
 }
 
 void SqScripterApp::OnClearError(wxThreadEvent&){
-	frame->ClearError();
+	if(frame)
+		frame->ClearError();
 }
 
 void SqScripterApp::OnPrint(wxThreadEvent& evt){
-	*frame->log << evt.GetString();
+	if(frame)
+		*frame->log << evt.GetString();
 }
 
 SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, const wxSize& size)
@@ -441,16 +473,40 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	menuFile->Append(ID_Save, "&Save\tCtrl-S", "Save and overwrite the file");
 	menuFile->Append(ID_SaveAs, "&Save As..\tCtrl-Shift-S", "Save to a file with a different name");
 	menuFile->AppendSeparator();
-	menuFile->Append(ID_Clear, "&Clear Log\tCtrl-C", "Clear output log");
+	menuFile->Append(ID_Clear, "&Clear Log\tCtrl-K", "Clear output log");
 	menuFile->AppendSeparator();
 	menuFile->Append(wxID_EXIT);
+	wxMenu *menuView = new wxMenu;
+	menuView->AppendCheckItem(ID_ShowSearch, "Show Search Panel\tCtrl-F", "Toggles show state of Search Panel");
+	menuView->Check(ID_ShowSearch, true); // Default is true
+	menuView->AppendCheckItem(ID_ShowLog, "Show Log Window\tCtrl-P", "Toggles show state of Log Window");
+	menuView->Check(ID_ShowLog, true); // Default is true
+	menuView->AppendCheckItem(ID_ShowCmd, "Show Command Panel\tCtrl-D", "Toggles show state of Command Panel");
+	menuView->Check(ID_ShowCmd, true); // Default is true
+	menuView->AppendSeparator();
+	menuView->AppendCheckItem(ID_WhiteSpaces, "Toggle Whitespaces\tCtrl-W", "Toggles show state of whitespaces");
+	menuView->AppendCheckItem(ID_LineNumbers, "Toggle Line Numbers\tCtrl-L", "Toggles show state of line numbers");
+	menuView->Check(ID_LineNumbers, true); // Default is true
 	wxMenu *menuHelp = new wxMenu;
 	menuHelp->Append(wxID_ABOUT);
 	wxMenuBar *menuBar = new wxMenuBar;
 	menuBar->Append( menuFile, "&File" );
+	menuBar->Append( menuView, "&View" );
 	menuBar->Append( menuHelp, "&Help" );
+	SetMenuBar( menuBar ); // Menu bar must be set before first call to SetStcLexer()
 
-	wxSplitterWindow *splitter = new wxSplitterWindow(this);
+	// Search Text panel at the top of the window (just below the toolbar).
+	wxPanel *search = new wxPanel(this, ID_SearchPanel);
+	wxStaticText *searchLabel = new wxStaticText(search, wxID_ANY, "Search Text:");
+	wxTextCtrl *searchText = new wxTextCtrl(search, ID_SearchText, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
+	wxButton *searchGo = new wxButton(search, ID_SearchGo, "Search");
+	wxBoxSizer *searchSizer = new wxBoxSizer(wxHORIZONTAL);
+	searchSizer->Add(searchLabel, 0, 0 | wxALIGN_CENTER_VERTICAL | wxLEFT, 5);
+	searchSizer->Add(searchText, 1, wxEXPAND | wxALL, 2);
+	searchSizer->Add(searchGo, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 2);
+	search->SetSizer(searchSizer);
+
+	splitter = new wxSplitterWindow(this);
 	// Script editing pane almost follows the window size, while the log pane occupies surplus area.
 	splitter->SetSashGravity(0.75);
 	splitter->SetMinimumPaneSize(40);
@@ -467,7 +523,9 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	splitter->SplitHorizontally(note, log, 200);
 
 	cmd = new wxTextCtrl(this, ID_Command, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
+	cmd->Bind(wxEVT_CHAR_HOOK, &SqScripterFrame::OnCmdChar, this);
 	wxBoxSizer *sizer = new wxBoxSizer(wxVERTICAL);
+	sizer->Add(search, 0, wxEXPAND | wxTOP);
 	sizer->Add(splitter, 1, wxEXPAND | wxALL);
 	sizer->Add(cmd, 0, wxEXPAND | wxBOTTOM);
 	SetSizer(sizer);
@@ -482,7 +540,6 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	toolbar->AddTool(ID_SaveAs, "SaveAs", app.LoadBitmap("saveas.png"), "Save with a new name");
 	toolbar->AddTool(ID_Clear, "Clear", app.LoadBitmap("clear.png"), "Clear output log");
 	toolbar->Realize();
-	SetMenuBar( menuBar );
 	CreateStatusBar();
 	SetStatusText( "" );
 
@@ -510,6 +567,8 @@ void SqScripterFrame::SetStcLexer(wxStyledTextCtrl *stc){
 	stc->SetFont(stcFont);
 	stc->StyleSetFont(wxSTC_STYLE_DEFAULT, stcFont);
 	stc->SetTabWidth(4);
+	stc->SetViewWhiteSpace(GetMenuBar()->IsChecked(ID_WhiteSpaces) ? wxSTC_WS_VISIBLEALWAYS : wxSTC_WS_INVISIBLE);
+	stc->SetWhitespaceForeground(true, wxColour(0x7f, 0xbf, 0xbf));
 	if(lex != LexSquirrel)
 		return;
 	stc->SetLexer(wxSTC_LEX_CPP);
@@ -547,9 +606,6 @@ void SqScripterFrame::SetStcLexer(wxStyledTextCtrl *stc){
 		"since skip skipline snippet startuml struct subpage subsection subsubsection "
 		"tableofcontents test throw throws todo tparam typedef union until var verbatim "
 		"verbinclude version vhdlflow warning weakgroup xmlonly xrefitem $ @ \\ & ~ < > # %");
-	bool state = true;
-	stc->SetViewWhiteSpace(state ? wxSTC_WS_VISIBLEALWAYS : wxSTC_WS_INVISIBLE);
-	stc->SetWhitespaceForeground(true, wxColour(0x7f, 0xbf, 0xbf));
 }
 
 void SqScripterFrame::AddError(AddErrorEvent &ae){
@@ -584,26 +640,23 @@ void SqScripterFrame::ClearError(){
 }
 
 /// Calculate width of line numbers margin by contents
-void SqScripterFrame::RecalcLineNumberWidth(){
-	wxWindow *w = note->GetCurrentPage();
-	if(!w)
+void SqScripterFrame::RecalcLineNumberWidth(int pageIndex){
+	StyledFileTextCtrl *stc = pageIndex < 0 ? GetCurrentPage() : GetPage(pageIndex);
+	if(!stc)
 		return;
-	wxStyledTextCtrl *stc = static_cast<wxStyledTextCtrl*>(w);
-	{
-		bool showState = true;//(GetMenuState(GetMenu(hDlg), IDM_LINENUMBERS, MF_BYCOMMAND) & MF_CHECKED) != 0;
+	bool showState = GetMenuBar()->IsChecked(ID_LineNumbers);
 
-		// Make sure to set type of the first margin to be line numbers
-		stc->SetMarginType(0, wxSTC_MARGIN_NUMBER);
+	// Make sure to set type of the first margin to be line numbers
+	stc->SetMarginType(0, wxSTC_MARGIN_NUMBER);
 
-		// Obtain width needed to display all line count in the buffer
-		int lineCount = stc->GetLineCount();
-		wxString lineText = "_";
-		for(int i = 0; pow(10, i) <= lineCount; i++)
-			lineText += "9";
+	// Obtain width needed to display all line count in the buffer
+	int lineCount = stc->GetLineCount();
+	wxString lineText = "_";
+	for(int i = 0; pow(10, i) <= lineCount; i++)
+		lineText += "9";
 
-		int width = showState ? stc->TextWidth(wxSTC_STYLE_LINENUMBER, lineText) : 0;
-		stc->SetMarginWidth(0, width);
-	}
+	int width = showState ? stc->TextWidth(wxSTC_STYLE_LINENUMBER, lineText) : 0;
+	stc->SetMarginWidth(0, width);
 }
 
 void SqScripterFrame::LoadScriptFile(const wxString& fileName){
@@ -727,14 +780,105 @@ void SqScripterFrame::OnClear(wxCommandEvent& event){
 	log->Clear();
 }
 
+void SqScripterFrame::OnShowSearch(wxCommandEvent& event){
+	wxWindow *w = GetWindowChild(ID_SearchPanel);
+	bool checked = GetMenuBar()->IsChecked(ID_ShowSearch);
+	w->Show(checked);
+	GetSizer()->Layout();
+
+	// The user's intent is to search, so let's bring the caret to the search text.
+	if(checked)
+		w->SetFocus();
+	else if(GetWindowChild(ID_SearchText)->HasFocus()){
+		// On the other hand, if the search bar is going to be hidden, set the caret to
+		// the main editor, or the hidden search text continues to have the caret and
+		// user's input secretly goes into it!
+		StyledFileTextCtrl *stc = GetCurrentPage();
+		if(stc)
+			stc->SetFocus();
+	}
+}
+
+void SqScripterFrame::OnShowLog(wxCommandEvent& event){
+	if(!GetMenuBar()->IsChecked(ID_ShowLog))
+		splitter->Unsplit();
+	else // The std::max() ensures that some space is left for the top pane.
+		splitter->SplitHorizontally(note, log, std::max(100, splitter->GetSize().GetHeight() - 100));
+}
+
+void SqScripterFrame::OnShowCmd(wxCommandEvent& event){
+	cmd->Show(GetMenuBar()->IsChecked(ID_ShowCmd));
+	GetSizer()->Layout();
+}
+
+void SqScripterFrame::OnWhiteSpaces(wxCommandEvent& event){
+	// Update all editor control in all pages
+	for(int i = 0; i < note->GetPageCount(); i++){
+		StyledFileTextCtrl *stc = GetPage(i);
+		if(stc)
+			stc->SetViewWhiteSpace(event.IsChecked() ? wxSTC_WS_VISIBLEALWAYS : wxSTC_WS_INVISIBLE);
+	}
+}
+
+void SqScripterFrame::OnLineNumbers(wxCommandEvent& event){
+	// Update all editor control in all pages
+	for(int i = 0; i < note->GetPageCount(); i++)
+		RecalcLineNumberWidth(i);
+}
+
+void SqScripterFrame::OnSearchGo(wxCommandEvent& event){
+	StyledFileTextCtrl *stc = GetCurrentPage();
+	wxTextCtrl *searchText = wxStaticCast(this->GetWindowChild(ID_SearchText), wxTextCtrl);
+	if(stc && searchText){
+		int currentPos = stc->GetCurrentPos();
+		stc->SearchAnchor();
+		int foundPos = stc->SearchNext(0, searchText->GetValue());
+		if(currentPos == foundPos){
+			stc->SetCurrentPos(currentPos + 1);
+			stc->SearchAnchor();
+			foundPos = stc->SearchNext(0, searchText->GetValue());
+		}
+		if(foundPos < 0){ // Start over
+			stc->SetCurrentPos(0);
+			stc->SearchAnchor();
+			stc->SearchNext(0, searchText->GetValue());
+		}
+		stc->EnsureCaretVisible();
+	}
+}
+
 void SqScripterFrame::OnEnterCmd(wxCommandEvent& event){
 	wxLog* oldLogger = wxLog::SetActiveTarget(logger);
 	wxStreamToTextRedirector redirect(log);
+	wxString cmdStr = cmd->GetValue();
 	if(wxGetApp().handle && wxGetApp().handle->config.commandProc)
-		wxGetApp().handle->config.commandProc(cmd->GetValue());
+		wxGetApp().handle->config.commandProc(cmdStr);
 	else
-		wxLogMessage("Execute the command");
+		wxLogMessage("Execute the command: " + cmdStr + "\n");
+	// Remember issued command in the history buffer only if the command is not repeated.
+	if(cmdHistory.empty() || cmdHistory.back() != cmdStr){
+		cmdHistory.push_back(cmdStr);
+		currentHistory = -1;
+	}
+	cmd->Clear();
 	wxLog::SetActiveTarget(oldLogger);
+}
+
+/// Event handler for Command line control character input.
+void SqScripterFrame::OnCmdChar(wxKeyEvent& event){
+	if(event.GetEventObject() == cmd){
+		if((event.GetKeyCode() == WXK_DOWN || event.GetKeyCode() == WXK_UP) && cmdHistory.size() != 0){
+			if(currentHistory == -1)
+				currentHistory = (int)cmdHistory.size() - 1;
+			else
+				currentHistory = (int)(currentHistory + (event.GetKeyCode() == WXK_DOWN ? -1 : 1) + cmdHistory.size()) % cmdHistory.size();
+			cmd->SetValue(cmdHistory[currentHistory]);
+			// Set the caret to the end, because DOS or ssh command line users usually expect this behavior.
+			cmd->SetInsertionPointEnd();
+			return; // Return without skipping
+		}
+	}
+	event.Skip();
 }
 
 void SqScripterFrame::OnRun(wxCommandEvent& event)
@@ -761,6 +905,8 @@ void SqScripterFrame::OnNew(wxCommandEvent&)
 	SetStcLexer(stc);
 	note->AddPage(stc, wxString("(New ") << pageIndexGenerator++ << ")", true, 0);
 	SetFileName("");
+	RecalcLineNumberWidth();
+	stc->SetFocus(); // Take over focus from search text at startup
 }
 
 void SqScripterFrame::OnOpen(wxCommandEvent& event)
