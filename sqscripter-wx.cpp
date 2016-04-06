@@ -72,6 +72,7 @@ private:
 	void OnAbout(wxCommandEvent& event);
 	void OnClose(wxCloseEvent&);
 	void OnClear(wxCommandEvent& event);
+	void OnShowLog(wxCommandEvent&);
 	void OnWhiteSpaces(wxCommandEvent&);
 	void OnLineNumbers(wxCommandEvent&);
 	void OnEnterCmd(wxCommandEvent&);
@@ -103,6 +104,7 @@ private:
 		return wxStaticCast(w, StyledFileTextCtrl);
 	}
 
+	wxSplitterWindow *splitter;
 	wxAuiNotebook *note;
 	wxFont stcFont;
 	wxTextCtrl *log;
@@ -155,6 +157,7 @@ enum
 	ID_Save,
 	ID_SaveAs,
 	ID_Clear,
+	ID_ShowLog,
 	ID_WhiteSpaces,
 	ID_LineNumbers,
 	ID_Command,
@@ -169,6 +172,7 @@ EVT_MENU(ID_Open,  SqScripterFrame::OnOpen)
 EVT_MENU(ID_Save,  SqScripterFrame::OnSave)
 EVT_MENU(ID_SaveAs,  SqScripterFrame::OnSave)
 EVT_MENU(ID_Clear,  SqScripterFrame::OnClear)
+EVT_MENU(ID_ShowLog, SqScripterFrame::OnShowLog)
 EVT_MENU(ID_WhiteSpaces, SqScripterFrame::OnWhiteSpaces)
 EVT_MENU(ID_LineNumbers, SqScripterFrame::OnLineNumbers)
 EVT_MENU(wxID_EXIT,  SqScripterFrame::OnExit)
@@ -461,6 +465,9 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	menuFile->AppendSeparator();
 	menuFile->Append(wxID_EXIT);
 	wxMenu *menuView = new wxMenu;
+	menuView->AppendCheckItem(ID_ShowLog, "Show Log Window\tCtrl-P", "Toggles show state of Log Window");
+	menuView->Check(ID_ShowLog, true); // Default is true
+	menuView->AppendSeparator();
 	menuView->AppendCheckItem(ID_WhiteSpaces, "Toggle Whitespaces\tCtrl-W", "Toggles show state of whitespaces");
 	menuView->AppendCheckItem(ID_LineNumbers, "Toggle Line Numbers\tCtrl-L", "Toggles show state of line numbers");
 	menuView->Check(ID_LineNumbers, true); // Default is true
@@ -472,7 +479,7 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	menuBar->Append( menuHelp, "&Help" );
 	SetMenuBar( menuBar ); // Menu bar must be set before first call to SetStcLexer()
 
-	wxSplitterWindow *splitter = new wxSplitterWindow(this);
+	splitter = new wxSplitterWindow(this);
 	// Script editing pane almost follows the window size, while the log pane occupies surplus area.
 	splitter->SetSashGravity(0.75);
 	splitter->SetMinimumPaneSize(40);
@@ -743,6 +750,13 @@ void SqScripterFrame::OnClose(wxCloseEvent& event){
 
 void SqScripterFrame::OnClear(wxCommandEvent& event){
 	log->Clear();
+}
+
+void SqScripterFrame::OnShowLog(wxCommandEvent& event){
+	if(!GetMenuBar()->IsChecked(ID_ShowLog))
+		splitter->Unsplit();
+	else // The std::max() ensures that some space is left for the top pane.
+		splitter->SplitHorizontally(note, log, std::max(100, splitter->GetSize().GetHeight() - 100));
 }
 
 void SqScripterFrame::OnWhiteSpaces(wxCommandEvent& event){
