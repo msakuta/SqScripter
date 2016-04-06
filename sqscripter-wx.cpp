@@ -73,6 +73,7 @@ private:
 	void OnClose(wxCloseEvent&);
 	void OnClear(wxCommandEvent& event);
 	void OnShowLog(wxCommandEvent&);
+	void OnShowCmd(wxCommandEvent&);
 	void OnWhiteSpaces(wxCommandEvent&);
 	void OnLineNumbers(wxCommandEvent&);
 	void OnEnterCmd(wxCommandEvent&);
@@ -158,6 +159,7 @@ enum
 	ID_SaveAs,
 	ID_Clear,
 	ID_ShowLog,
+	ID_ShowCmd,
 	ID_WhiteSpaces,
 	ID_LineNumbers,
 	ID_Command,
@@ -173,6 +175,7 @@ EVT_MENU(ID_Save,  SqScripterFrame::OnSave)
 EVT_MENU(ID_SaveAs,  SqScripterFrame::OnSave)
 EVT_MENU(ID_Clear,  SqScripterFrame::OnClear)
 EVT_MENU(ID_ShowLog, SqScripterFrame::OnShowLog)
+EVT_MENU(ID_ShowCmd, SqScripterFrame::OnShowCmd)
 EVT_MENU(ID_WhiteSpaces, SqScripterFrame::OnWhiteSpaces)
 EVT_MENU(ID_LineNumbers, SqScripterFrame::OnLineNumbers)
 EVT_MENU(wxID_EXIT,  SqScripterFrame::OnExit)
@@ -467,6 +470,8 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	wxMenu *menuView = new wxMenu;
 	menuView->AppendCheckItem(ID_ShowLog, "Show Log Window\tCtrl-P", "Toggles show state of Log Window");
 	menuView->Check(ID_ShowLog, true); // Default is true
+	menuView->AppendCheckItem(ID_ShowCmd, "Show Command Panel\tCtrl-D", "Toggles show state of Command Panel");
+	menuView->Check(ID_ShowCmd, true); // Default is true
 	menuView->AppendSeparator();
 	menuView->AppendCheckItem(ID_WhiteSpaces, "Toggle Whitespaces\tCtrl-W", "Toggles show state of whitespaces");
 	menuView->AppendCheckItem(ID_LineNumbers, "Toggle Line Numbers\tCtrl-L", "Toggles show state of line numbers");
@@ -757,6 +762,11 @@ void SqScripterFrame::OnShowLog(wxCommandEvent& event){
 		splitter->Unsplit();
 	else // The std::max() ensures that some space is left for the top pane.
 		splitter->SplitHorizontally(note, log, std::max(100, splitter->GetSize().GetHeight() - 100));
+}
+
+void SqScripterFrame::OnShowCmd(wxCommandEvent& event){
+	cmd->Show(GetMenuBar()->IsChecked(ID_ShowCmd));
+	GetSizer()->Layout();
 }
 
 void SqScripterFrame::OnWhiteSpaces(wxCommandEvent& event){
