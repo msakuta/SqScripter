@@ -76,6 +76,7 @@ private:
 	void OnShowCmd(wxCommandEvent&);
 	void OnWhiteSpaces(wxCommandEvent&);
 	void OnLineNumbers(wxCommandEvent&);
+	void OnSearchGo(wxCommandEvent&);
 	void OnEnterCmd(wxCommandEvent&);
 	void OnCmdChar(wxKeyEvent&);
 	void OnPageChange(wxAuiNotebookEvent&);
@@ -162,6 +163,8 @@ enum
 	ID_ShowCmd,
 	ID_WhiteSpaces,
 	ID_LineNumbers,
+	ID_SearchText,
+	ID_SearchGo,
 	ID_Command,
 	ID_NoteBook
 };
@@ -180,7 +183,9 @@ EVT_MENU(ID_WhiteSpaces, SqScripterFrame::OnWhiteSpaces)
 EVT_MENU(ID_LineNumbers, SqScripterFrame::OnLineNumbers)
 EVT_MENU(wxID_EXIT,  SqScripterFrame::OnExit)
 EVT_MENU(wxID_ABOUT, SqScripterFrame::OnAbout)
+EVT_BUTTON(ID_SearchGo, SqScripterFrame::OnSearchGo)
 EVT_CLOSE(SqScripterFrame::OnClose)
+EVT_TEXT_ENTER(ID_SearchText, SqScripterFrame::OnSearchGo)
 EVT_TEXT_ENTER(ID_Command, SqScripterFrame::OnEnterCmd)
 EVT_AUINOTEBOOK_PAGE_CHANGED(ID_NoteBook, SqScripterFrame::OnPageChange)
 EVT_AUINOTEBOOK_PAGE_CLOSE(ID_NoteBook, SqScripterFrame::OnPageClose)
@@ -484,6 +489,17 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	menuBar->Append( menuHelp, "&Help" );
 	SetMenuBar( menuBar ); // Menu bar must be set before first call to SetStcLexer()
 
+	// Search Text panel at the top of the window (just below the toolbar).
+	wxPanel *search = new wxPanel(this);
+	wxStaticText *searchLabel = new wxStaticText(search, wxID_ANY, "Search Text:");
+	wxTextCtrl *searchText = new wxTextCtrl(search, ID_SearchText, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
+	wxButton *searchGo = new wxButton(search, ID_SearchGo, "Search");
+	wxBoxSizer *searchSizer = new wxBoxSizer(wxHORIZONTAL);
+	searchSizer->Add(searchLabel, 0, 0 | wxALIGN_CENTER_VERTICAL | wxLEFT, 5);
+	searchSizer->Add(searchText, 1, wxEXPAND | wxALL, 2);
+	searchSizer->Add(searchGo, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 2);
+	search->SetSizer(searchSizer);
+
 	splitter = new wxSplitterWindow(this);
 	// Script editing pane almost follows the window size, while the log pane occupies surplus area.
 	splitter->SetSashGravity(0.75);
@@ -503,6 +519,7 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	cmd = new wxTextCtrl(this, ID_Command, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
 	cmd->Bind(wxEVT_CHAR_HOOK, &SqScripterFrame::OnCmdChar, this);
 	wxBoxSizer *sizer = new wxBoxSizer(wxVERTICAL);
+	sizer->Add(search, 0, wxEXPAND | wxTOP);
 	sizer->Add(splitter, 1, wxEXPAND | wxALL);
 	sizer->Add(cmd, 0, wxEXPAND | wxBOTTOM);
 	SetSizer(sizer);
@@ -782,6 +799,27 @@ void SqScripterFrame::OnLineNumbers(wxCommandEvent& event){
 	// Update all editor control in all pages
 	for(int i = 0; i < note->GetPageCount(); i++)
 		RecalcLineNumberWidth(i);
+}
+
+void SqScripterFrame::OnSearchGo(wxCommandEvent& event){
+	StyledFileTextCtrl *stc = GetCurrentPage();
+	wxTextCtrl *searchText = wxStaticCast(this->GetWindowChild(ID_SearchText), wxTextCtrl);
+	if(stc && searchText){
+		int currentPos = stc->GetCurrentPos();
+		stc->SearchAnchor();
+		int foundPos = stc->SearchNext(0, searchText->GetValue());
+		if(currentPos == foundPos){
+			stc->SetCurrentPos(currentPos + 1);
+			stc->SearchAnchor();
+			foundPos = stc->SearchNext(0, searchText->GetValue());
+		}
+		if(foundPos < 0){ // Start over
+			stc->SetCurrentPos(0);
+			stc->SearchAnchor();
+			stc->SearchNext(0, searchText->GetValue());
+		}
+		stc->EnsureCaretVisible();
+	}
 }
 
 void SqScripterFrame::OnEnterCmd(wxCommandEvent& event){
