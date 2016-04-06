@@ -72,6 +72,7 @@ private:
 	void OnAbout(wxCommandEvent& event);
 	void OnClose(wxCloseEvent&);
 	void OnClear(wxCommandEvent& event);
+	void OnShowSearch(wxCommandEvent&);
 	void OnShowLog(wxCommandEvent&);
 	void OnShowCmd(wxCommandEvent&);
 	void OnWhiteSpaces(wxCommandEvent&);
@@ -159,10 +160,12 @@ enum
 	ID_Save,
 	ID_SaveAs,
 	ID_Clear,
+	ID_ShowSearch,
 	ID_ShowLog,
 	ID_ShowCmd,
 	ID_WhiteSpaces,
 	ID_LineNumbers,
+	ID_SearchPanel,
 	ID_SearchText,
 	ID_SearchGo,
 	ID_Command,
@@ -177,6 +180,7 @@ EVT_MENU(ID_Open,  SqScripterFrame::OnOpen)
 EVT_MENU(ID_Save,  SqScripterFrame::OnSave)
 EVT_MENU(ID_SaveAs,  SqScripterFrame::OnSave)
 EVT_MENU(ID_Clear,  SqScripterFrame::OnClear)
+EVT_MENU(ID_ShowSearch, SqScripterFrame::OnShowSearch)
 EVT_MENU(ID_ShowLog, SqScripterFrame::OnShowLog)
 EVT_MENU(ID_ShowCmd, SqScripterFrame::OnShowCmd)
 EVT_MENU(ID_WhiteSpaces, SqScripterFrame::OnWhiteSpaces)
@@ -473,6 +477,8 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	menuFile->AppendSeparator();
 	menuFile->Append(wxID_EXIT);
 	wxMenu *menuView = new wxMenu;
+	menuView->AppendCheckItem(ID_ShowSearch, "Show Search Panel\tCtrl-F", "Toggles show state of Search Panel");
+	menuView->Check(ID_ShowSearch, true); // Default is true
 	menuView->AppendCheckItem(ID_ShowLog, "Show Log Window\tCtrl-P", "Toggles show state of Log Window");
 	menuView->Check(ID_ShowLog, true); // Default is true
 	menuView->AppendCheckItem(ID_ShowCmd, "Show Command Panel\tCtrl-D", "Toggles show state of Command Panel");
@@ -490,7 +496,7 @@ SqScripterFrame::SqScripterFrame(const wxString& title, const wxPoint& pos, cons
 	SetMenuBar( menuBar ); // Menu bar must be set before first call to SetStcLexer()
 
 	// Search Text panel at the top of the window (just below the toolbar).
-	wxPanel *search = new wxPanel(this);
+	wxPanel *search = new wxPanel(this, ID_SearchPanel);
 	wxStaticText *searchLabel = new wxStaticText(search, wxID_ANY, "Search Text:");
 	wxTextCtrl *searchText = new wxTextCtrl(search, ID_SearchText, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
 	wxButton *searchGo = new wxButton(search, ID_SearchGo, "Search");
@@ -774,6 +780,25 @@ void SqScripterFrame::OnClear(wxCommandEvent& event){
 	log->Clear();
 }
 
+void SqScripterFrame::OnShowSearch(wxCommandEvent& event){
+	wxWindow *w = GetWindowChild(ID_SearchPanel);
+	bool checked = GetMenuBar()->IsChecked(ID_ShowSearch);
+	w->Show(checked);
+	GetSizer()->Layout();
+
+	// The user's intent is to search, so let's bring the caret to the search text.
+	if(checked)
+		w->SetFocus();
+	else if(GetWindowChild(ID_SearchText)->HasFocus()){
+		// On the other hand, if the search bar is going to be hidden, set the caret to
+		// the main editor, or the hidden search text continues to have the caret and
+		// user's input secretly goes into it!
+		StyledFileTextCtrl *stc = GetCurrentPage();
+		if(stc)
+			stc->SetFocus();
+	}
+}
+
 void SqScripterFrame::OnShowLog(wxCommandEvent& event){
 	if(!GetMenuBar()->IsChecked(ID_ShowLog))
 		splitter->Unsplit();
@@ -881,6 +906,7 @@ void SqScripterFrame::OnNew(wxCommandEvent&)
 	note->AddPage(stc, wxString("(New ") << pageIndexGenerator++ << ")", true, 0);
 	SetFileName("");
 	RecalcLineNumberWidth();
+	stc->SetFocus(); // Take over focus from search text at startup
 }
 
 void SqScripterFrame::OnOpen(wxCommandEvent& event)
