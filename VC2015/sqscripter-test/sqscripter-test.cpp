@@ -33,7 +33,9 @@ static HSQUIRRELVM sqvm;
 void CmdProc(const char *cmd){
 	SQInteger oldStack = sq_gettop(sqvm);
 	scripter_clearerror(sw);
-	if(SQ_FAILED(sq_compilebuffer(sqvm, cmd, strlen(cmd), _SC("command"), SQTrue))){
+	wchar_t wcmd[256];
+	mbstowcs(wcmd, cmd, sizeof wcmd/sizeof*wcmd);
+	if(SQ_FAILED(sq_compilebuffer(sqvm, wcmd, wcslen(wcmd), _SC("command"), SQTrue))){
 		sq_pop(sqvm, sq_gettop(sqvm) - oldStack);
 		return;
 	}
@@ -49,7 +51,12 @@ void CmdProc(const char *cmd){
 static void RunProc(const char *fileName, const char *content){
 	SQInteger oldStack = sq_gettop(sqvm);
 	scripter_clearerror(sw);
-	if(SQ_FAILED(sq_compilebuffer(sqvm, content, strlen(content), fileName, SQTrue))){
+	wchar_t wfileName[256];
+	mbstowcs(wfileName, fileName, sizeof wfileName/sizeof*wfileName);
+	size_t wlen = strlen(content)*4+1;
+	std::vector<wchar_t> wcontent(wlen);
+	mbstowcs(&wcontent.front(), content, wlen);
+	if(SQ_FAILED(sq_compilebuffer(sqvm, &wcontent.front(), wcslen(&wcontent.front()), wfileName, SQTrue))){
 		sq_pop(sqvm, sq_gettop(sqvm) - oldStack);
 		return;
 	}
@@ -65,7 +72,9 @@ static void SqPrintFunc(HSQUIRRELVM v, const SQChar *s, ...){
 	va_list vl;
 	va_start(vl, s);
 	char buf[2048];
-	vsprintf_s(buf, s, vl);
+	char mbs[1024];
+	wcstombs(mbs, s, sizeof mbs);
+	vsprintf_s(buf, mbs, vl);
 	strcat_s(buf, "\n"); // Add line break
 	PrintProc(sw, buf);
 	va_end(vl);
@@ -86,7 +95,11 @@ static void SqCompilerError(HSQUIRRELVM v, const SQChar *desc, const SQChar *sou
 	std::stringstream ss;
 	ss << "Compile error on " << source << "(" << line << "," << column << "): " << desc;
 	PrintProc(sw, ss.str().c_str());
-	scripter_adderror(sw, desc, source, line, column);
+	char mbdesc[256];
+	wcstombs(mbdesc, desc, sizeof mbdesc/sizeof*mbdesc);
+	char mbsource[256];
+	wcstombs(mbsource, source, sizeof mbsource/sizeof*mbsource);
+	scripter_adderror(sw, mbdesc, mbsource, line, column);
 }
 
 static void OnClose(ScripterWindow *sc){
