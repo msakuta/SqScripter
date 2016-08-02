@@ -75,12 +75,14 @@ class wxGLCanvasSubClass: public wxGLCanvas {
 public:
 	wxGLCanvasSubClass(wxFrame* parent);
 	void Paintit(wxPaintEvent& event);
+	void timer(wxTimerEvent& event);
 protected:
 	DECLARE_EVENT_TABLE()
 };
 
 BEGIN_EVENT_TABLE(wxGLCanvasSubClass, wxGLCanvas)
 EVT_PAINT    (wxGLCanvasSubClass::Paintit)
+EVT_TIMER    (0, wxGLCanvasSubClass::timer)
 END_EVENT_TABLE()
 
 wxGLCanvasSubClass::wxGLCanvasSubClass(wxFrame *parent)
@@ -101,6 +103,16 @@ wxGLCanvasSubClass::wxGLCanvasSubClass(wxFrame *parent)
 
 void wxGLCanvasSubClass::Paintit(wxPaintEvent& WXUNUSED(event)){
 	Render();
+}
+
+void wxGLCanvasSubClass::timer(wxTimerEvent&){
+	for(auto& it : creeps){
+		RoomPosition newPos(it.pos.x + rand() % 3 - 1, it.pos.y + rand() % 3 - 1);
+		if(room[newPos.y][newPos.x].type || newPos.x < 0 || ROOMSIZE <= newPos.x || newPos.y < 0 || ROOMSIZE <= newPos.y)
+			continue;
+		it.pos = newPos;
+	}
+	this->Refresh();
 }
 
 void wxGLCanvasSubClass::Render()
@@ -184,6 +196,7 @@ class MyApp: public wxApp
 {
 	virtual bool OnInit();
 	wxGLCanvas * MyGLCanvas;
+	wxTimer animTimer;
 };
 
 
@@ -217,9 +230,13 @@ bool MyApp::OnInit()
 	}
 
 	wxFrame *frame = new wxFrame((wxFrame *)NULL, -1,  wxT("Hello GL World"), wxPoint(50,50), wxSize(640,640));
-	new wxGLCanvasSubClass(frame);
+
+	MyApp &app = wxGetApp();
+	app.MyGLCanvas = new wxGLCanvasSubClass(frame);
 
 	frame->Show(TRUE);
+	app.animTimer.SetOwner(wxGetApp().MyGLCanvas, 0);
+	app.animTimer.Start(100);
 	return TRUE;
 }
 
