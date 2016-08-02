@@ -39,18 +39,36 @@ struct Tile{
 	int type;
 };
 
-struct Creep{
+struct RoomPosition{
 	int x;
 	int y;
+
+	RoomPosition(int x, int y) : x(x), y(y){}
+};
+
+struct RoomObject{
+	RoomPosition pos;
+
+	RoomObject(int x, int y) : pos(x, y){}
+};
+
+struct Creep : public RoomObject{
 	int owner;
 
-	Creep(int x, int y, int owner) : x(x), y(y), owner(owner){}
+	Creep(int x, int y, int owner) : RoomObject(x, y), owner(owner){}
+};
+
+struct Spawn : public RoomObject{
+	int owner;
+
+	Spawn(int x, int y, int owner) : RoomObject(x, y), owner(owner){}
 };
 
 const int ROOMSIZE = 50;
 
 static Tile room[ROOMSIZE][ROOMSIZE] = {0};
 static std::list<Creep> creeps;
+static std::list<Spawn> spawns;
 
 class wxGLCanvasSubClass: public wxGLCanvas {
 	void Render();
@@ -94,13 +112,13 @@ void wxGLCanvasSubClass::Render()
 	glClear(GL_COLOR_BUFFER_BIT);
 	glViewport(0, 0, (GLint)GetSize().x, (GLint)GetSize().y);
 
-	static const GLfloat plainColor[4] = {0.75, 0.75, 0.75, 1};
+	static const GLfloat plainColor[4] = {0.5, 0.5, 0.5, 1};
 	static const GLfloat wallColor[4] = {0, 0, 0, 1};
 	static const GLfloat creepColors[2][4] = {{0,1,1,1}, {1,0,0,1}};
 
 	glPushMatrix();
 	glScaled(2. / ROOMSIZE, 2. / ROOMSIZE, 1);
-	glTranslated(-ROOMSIZE / 2, -ROOMSIZE / 2, 0);
+	glTranslated(-ROOMSIZE / 2 + .5, -ROOMSIZE / 2 + .5, 0);
 	glBegin(GL_QUADS);
 	for(int i = 0; i < ROOMSIZE; i++){
 		for(int j = 0; j < ROOMSIZE; j++){
@@ -118,7 +136,7 @@ void wxGLCanvasSubClass::Render()
 		glColor3f(0, 0, 0);
 		for(int j = 0; j < 32; j++){
 			double angle = j * 2. * M_PI / 32;
-			glVertex2d(.5 * cos(angle) + it.x, .5 * sin(angle) + it.y);
+			glVertex2d(.5 * cos(angle) + it.pos.x, .5 * sin(angle) + it.pos.y);
 		}
 		glEnd();
 
@@ -126,7 +144,33 @@ void wxGLCanvasSubClass::Render()
 		glColor4fv(creepColors[!!it.owner]);
 		for(int j = 0; j < 32; j++){
 			double angle = j * 2. * M_PI / 32;
-			glVertex2d(.4 * cos(angle) + it.x, .4 * sin(angle) + it.y);
+			glVertex2d(.3 * cos(angle) + it.pos.x, .3 * sin(angle) + it.pos.y);
+		}
+		glEnd();
+	}
+
+	for(auto it : spawns){
+		glColor3f(0.8, 0.8, 0.75);
+		glBegin(GL_POLYGON);
+		for(int j = 0; j < 32; j++){
+			double angle = j * 2. * M_PI / 32;
+			glVertex2d(.7 * cos(angle) + it.pos.x, .7 * sin(angle) + it.pos.y);
+		}
+		glEnd();
+
+		glColor3f(0, 0, 0);
+		glBegin(GL_POLYGON);
+		for(int j = 0; j < 32; j++){
+			double angle = j * 2. * M_PI / 32;
+			glVertex2d(.6 * cos(angle) + it.pos.x, .6 * sin(angle) + it.pos.y);
+		}
+		glEnd();
+
+		glColor4fv(creepColors[!!it.owner]);
+		glBegin(GL_POLYGON);
+		for(int j = 0; j < 32; j++){
+			double angle = j * 2. * M_PI / 32;
+			glVertex2d(.3 * cos(angle) + it.pos.x, .3 * sin(angle) + it.pos.y);
 		}
 		glEnd();
 	}
@@ -160,7 +204,16 @@ bool MyApp::OnInit()
 			x = rand() % ROOMSIZE;
 			y = rand() % ROOMSIZE;
 		}while(room[y][x].type != 0);
-		creeps.push_back(Creep(x, y, rand() % 2));
+		creeps.push_back(Creep(x, y, i % 2));
+	}
+
+	for(int i = 0; i < 2; i++){
+		int x, y;
+		do{
+			x = rand() % ROOMSIZE;
+			y = rand() % ROOMSIZE;
+		}while(room[y][x].type != 0);
+		spawns.push_back(Spawn(x, y, i));
 	}
 
 	wxFrame *frame = new wxFrame((wxFrame *)NULL, -1,  wxT("Hello GL World"), wxPoint(50,50), wxSize(640,640));
