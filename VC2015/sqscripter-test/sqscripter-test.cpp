@@ -13,6 +13,10 @@
 #include "sqstdstring.h"
 #include "sqstdsystem.h"
 
+extern "C"{
+#include "clib/rseq.h"
+}
+
 #include <windows.h>
 
 #include <string>
