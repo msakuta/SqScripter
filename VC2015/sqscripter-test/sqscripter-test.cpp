@@ -17,6 +17,7 @@
 
 #include <string>
 #include <sstream>
+#include <list>
 
 
 #include <wx/wx.h>
@@ -34,6 +35,22 @@
 #endif
 
 
+struct Tile{
+	int type;
+};
+
+struct Creep{
+	int x;
+	int y;
+	int owner;
+
+	Creep(int x, int y, int owner) : x(x), y(y), owner(owner){}
+};
+
+const int ROOMSIZE = 50;
+
+static Tile room[ROOMSIZE][ROOMSIZE] = {0};
+static std::list<Creep> creeps;
 
 class wxGLCanvasSubClass: public wxGLCanvas {
 	void Render();
@@ -77,32 +94,43 @@ void wxGLCanvasSubClass::Render()
 	glClear(GL_COLOR_BUFFER_BIT);
 	glViewport(0, 0, (GLint)GetSize().x, (GLint)GetSize().y);
 
-	glBegin(GL_POLYGON);
-	glColor3f(1.0, 1.0, 1.0);
-	glVertex2f(-0.5, -0.5);
-	glVertex2f(-0.5, 0.5);
-	glVertex2f(0.5, 0.5);
-	glVertex2f(0.5, -0.5);
-	glColor3f(0.4, 0.5, 0.4);
-	glVertex2f(0.0, -0.8);
+	static const GLfloat plainColor[4] = {0.75, 0.75, 0.75, 1};
+	static const GLfloat wallColor[4] = {0, 0, 0, 1};
+	static const GLfloat creepColors[2][4] = {{0,1,1,1}, {1,0,0,1}};
+
+	glPushMatrix();
+	glScaled(2. / ROOMSIZE, 2. / ROOMSIZE, 1);
+	glTranslated(-ROOMSIZE / 2, -ROOMSIZE / 2, 0);
+	glBegin(GL_QUADS);
+	for(int i = 0; i < ROOMSIZE; i++){
+		for(int j = 0; j < ROOMSIZE; j++){
+			glColor4fv(room[i][j].type ? wallColor : plainColor);
+			glVertex2f(-0.5 + j, -0.5 + i);
+			glVertex2f(-0.5 + j, 0.5 + i);
+			glVertex2f(0.5 + j, 0.5 + i);
+			glVertex2f(0.5 + j, -0.5 + i);
+		}
+	}
 	glEnd();
 
-	glBegin(GL_POLYGON);
-	glColor3f(1.0, 0.0, 0.0);
-	glVertex2f(0.1, 0.1);
-	glVertex2f(-0.1, 0.1);
-	glVertex2f(-0.1, -0.1);
-	glVertex2f(0.1, -0.1);
-	glEnd();
+	for(auto it : creeps){
+		glBegin(GL_POLYGON);
+		glColor3f(0, 0, 0);
+		for(int j = 0; j < 32; j++){
+			double angle = j * 2. * M_PI / 32;
+			glVertex2d(.5 * cos(angle) + it.x, .5 * sin(angle) + it.y);
+		}
+		glEnd();
 
-	// using a little of glut
-	glColor4f(0,0,1,1);
-//	glutWireTeapot(0.4);
-
-	glLoadIdentity();
-	glColor4f(2,0,1,1);
-//	glutWireTeapot(0.6);
-	// done using glut
+		glBegin(GL_POLYGON);
+		glColor4fv(creepColors[!!it.owner]);
+		for(int j = 0; j < 32; j++){
+			double angle = j * 2. * M_PI / 32;
+			glVertex2d(.4 * cos(angle) + it.x, .4 * sin(angle) + it.y);
+		}
+		glEnd();
+	}
+	glPopMatrix();
 
 	glFlush();
 	SwapBuffers();
@@ -120,7 +148,22 @@ IMPLEMENT_APP(MyApp)
 
 bool MyApp::OnInit()
 {
-	wxFrame *frame = new wxFrame((wxFrame *)NULL, -1,  wxT("Hello GL World"), wxPoint(50,50), wxSize(200,200));
+	for(int i = 0; i < ROOMSIZE; i++){
+		for(size_t j = 0; j < ROOMSIZE; j++){
+			room[i][j].type = rand() % 3 == 0;
+		}
+	}
+
+	for(int i = 0; i < 20; i++){
+		int x, y;
+		do{
+			x = rand() % ROOMSIZE;
+			y = rand() % ROOMSIZE;
+		}while(room[y][x].type != 0);
+		creeps.push_back(Creep(x, y, rand() % 2));
+	}
+
+	wxFrame *frame = new wxFrame((wxFrame *)NULL, -1,  wxT("Hello GL World"), wxPoint(50,50), wxSize(640,640));
 	new wxGLCanvasSubClass(frame);
 
 	frame->Show(TRUE);
