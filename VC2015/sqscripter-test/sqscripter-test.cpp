@@ -74,6 +74,36 @@ static Tile room[ROOMSIZE][ROOMSIZE] = {0};
 static std::list<Creep> creeps;
 static std::list<Spawn> spawns;
 
+static double noise_pixel(int x, int y, int bit){
+	struct random_sequence rs;
+	initfull_rseq(&rs, x + (bit << 16), y);
+	return drseq(&rs);
+}
+
+double perlin_noise_pixel(int x, int y, int bit){
+	int ret = 0, i;
+	double sum = 0., maxv = 0., f = 1.;
+	double persistence = 0.5;
+	for(i = 3; 0 <= i; i--){
+		int cell = 1 << i;
+		double a00, a01, a10, a11, fx, fy;
+		a00 = noise_pixel(x / cell, y / cell, bit);
+		a01 = noise_pixel(x / cell, y / cell + 1, bit);
+		a10 = noise_pixel(x / cell + 1, y / cell, bit);
+		a11 = noise_pixel(x / cell + 1, y / cell + 1, bit);
+		fx = (double)(x % cell) / cell;
+		fy = (double)(y % cell) / cell;
+		sum += ((a00 * (1. - fx) + a10 * fx) * (1. - fy)
+			+ (a01 * (1. - fx) + a11 * fx) * fy) * f;
+		maxv += f;
+		f *= persistence;
+	}
+	return sum / maxv;
+}
+
+
+
+
 class wxGLCanvasSubClass: public wxGLCanvas {
 	void Render();
 public:
@@ -207,11 +237,15 @@ class MyApp: public wxApp
 IMPLEMENT_APP(MyApp)
 
 
+
+
 bool MyApp::OnInit()
 {
 	for(int i = 0; i < ROOMSIZE; i++){
+		int di = i - ROOMSIZE / 2;
 		for(size_t j = 0; j < ROOMSIZE; j++){
-			room[i][j].type = rand() % 3 == 0;
+			int dj = j - ROOMSIZE / 2;
+			room[i][j].type = perlin_noise_pixel(j, i, 3) < 1. - 1. / (1. + sqrt(di * di + dj * dj) / (ROOMSIZE / 2));
 		}
 	}
 
