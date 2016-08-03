@@ -272,6 +272,9 @@ bool MyApp::OnInit()
 	MyApp &app = wxGetApp();
 	app.MyGLCanvas = new wxGLCanvasSubClass(frame);
 
+	int nonmain(int argc, char *argv[]);
+	nonmain(0, NULL);
+
 	frame->Show(TRUE);
 	app.animTimer.SetOwner(wxGetApp().MyGLCanvas, 0);
 	app.animTimer.Start(100);
@@ -405,10 +408,8 @@ int nonmain(int argc, char *argv[])
 	// Set the lexer to squirrel
 	scripter_lexer_squirrel(sw);
 
-	wxInitializer wxi;
-
 	// Windows message loop
-	do{
+/*	do{
 		MSG msg;
 //		if(PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE)){
 			if(GetMessage(&msg, NULL, 0, 0) <= 0)
@@ -416,9 +417,9 @@ int nonmain(int argc, char *argv[])
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 //		}
-	}while (true);
+	}while (true);*/
 
-	sq_close(sqvm);
+//	sq_close(sqvm);
 
 	return 0;
 }
