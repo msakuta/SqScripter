@@ -5,6 +5,9 @@
  * It just shows how to setup and run the program to enable SqScripter window.
  */
 
+
+#define NOMINMAX
+
 #include "sqscripter.h"
 #include "squirrel.h"
 #include "sqstdblob.h"
@@ -15,6 +18,7 @@
 
 extern "C"{
 #include "clib/rseq.h"
+#include "clib/c.h"
 }
 
 #include <windows.h>
@@ -41,6 +45,7 @@ extern "C"{
 
 struct Tile{
 	int type;
+	int cost; ///< Used for A* pathfinding algorithm
 };
 
 struct RoomPosition{
@@ -48,7 +53,21 @@ struct RoomPosition{
 	int y;
 
 	RoomPosition(int x, int y) : x(x), y(y){}
+	bool operator==(const RoomPosition& o)const{return x == o.x && y == o.y;}
+	bool operator!=(const RoomPosition& o)const{return !(*this == o);}
 };
+
+struct PathNode{
+	RoomPosition pos;
+	int dx;
+	int dy;
+
+	PathNode(const RoomPosition& pos, int dx = 0, int dy = 0) : pos(pos), dx(dx), dy(dy){}
+};
+
+/// Path has nodes in reverse order of progress, because it's better to truncate from the last
+/// element so that former elements are not moved in the memory.
+typedef std::vector<PathNode> Path;
 
 struct RoomObject{
 	RoomPosition pos;
@@ -57,6 +76,7 @@ struct RoomObject{
 };
 
 struct Creep : public RoomObject{
+	Path path;
 	int owner;
 
 	Creep(int x, int y, int owner) : RoomObject(x, y), owner(owner){}
@@ -73,6 +93,77 @@ const int ROOMSIZE = 50;
 static Tile room[ROOMSIZE][ROOMSIZE] = {0};
 static std::list<Creep> creeps;
 static std::list<Spawn> spawns;
+
+std::vector<PathNode> findPath(const RoomPosition& from, const RoomPosition& to){
+	auto internal = [to](){
+		int changes = 0;
+		for(int y = 0; y < ROOMSIZE; y++){
+			for(int x = 0; x < ROOMSIZE; x++){
+				Tile &tile = room[y][x];
+				if(tile.cost == INT_MAX)
+					continue;
+				for(int y1 = std::max(y - 1, 0); y1 <= std::min(y + 1, ROOMSIZE-1); y1++){
+					for(int x1 = std::max(x - 1, 0); x1 <= std::min(x + 1, ROOMSIZE-1); x1++){
+						Tile &tile1 = room[y1][x1];
+						if(tile1.type == 0 && tile.cost + 1 < tile1.cost){
+							tile1.cost = tile.cost + 1;
+							changes++;
+							if(to.x == x1 && to.y == y1)
+								return 0;
+						}
+					}
+				}
+			}
+		}
+		return changes;
+	};
+
+	for(int y = 0; y < ROOMSIZE; y++){
+		for(int x = 0; x < ROOMSIZE; x++){
+			Tile &tile = room[y][x];
+			tile.cost = (x == from.x && y == from.y ? 0 : INT_MAX);
+		}
+	}
+
+	std::vector<PathNode> ret;
+
+	while(internal());
+
+	Tile &destTile = room[to.y][to.x];
+	if(destTile.cost == INT_MAX)
+		return ret;
+
+	// Prefer vertical or horizontal movenent over diagonal even though the costs are the same,
+	// by searching preferred positions first.
+	static const int deltaPreferences[][2] = {{-1,0},{0,-1},{1,0},{0,1},{-1,-1},{-1,1},{1,-1},{1,1}};
+
+	RoomPosition cur = to;
+	while(cur != from){
+		Tile &tile = room[cur.y][cur.x];
+		int bestx = -1, besty = -1;
+		int besti;
+		int bestcost = tile.cost;
+		for(int i = 0; i < numof(deltaPreferences); i++){
+			int y1 = cur.y + deltaPreferences[i][1];
+			int x1 = cur.x + deltaPreferences[i][0];
+			if(x1 < 0 || ROOMSIZE <= x1 || y1 < 0 || ROOMSIZE <= y1)
+				continue;
+			Tile &tile1 = room[y1][x1];
+			if(tile1.type == 0 && tile1.cost < bestcost){
+				bestcost = tile1.cost;
+				bestx = x1;
+				besty = y1;
+				besti = i;
+			}
+		}
+		cur.x = bestx;
+		cur.y = besty;
+		if(cur != from)
+			ret.push_back(PathNode(cur, deltaPreferences[besti][0], deltaPreferences[besti][1]));
+	}
+
+	return ret;
+}
 
 static double noise_pixel(int x, int y, int bit){
 	struct random_sequence rs;
@@ -139,12 +230,45 @@ void wxGLCanvasSubClass::Paintit(wxPaintEvent& WXUNUSED(event)){
 	Render();
 }
 
+bool isBlocked(const RoomPosition &pos){
+	if(room[pos.y][pos.x].type || pos.x < 0 || ROOMSIZE <= pos.x || pos.y < 0 || ROOMSIZE <= pos.y)
+		return true;
+	for(auto& it : creeps){
+		if(it.pos == pos)
+			return true;
+	}
+	for(auto& it : spawns){
+		if(it.pos == pos)
+			return true;
+	}
+	return false;
+}
+
 void wxGLCanvasSubClass::timer(wxTimerEvent&){
 	for(auto& it : creeps){
-		RoomPosition newPos(it.pos.x + rand() % 3 - 1, it.pos.y + rand() % 3 - 1);
-		if(room[newPos.y][newPos.x].type || newPos.x < 0 || ROOMSIZE <= newPos.x || newPos.y < 0 || ROOMSIZE <= newPos.y)
-			continue;
-		it.pos = newPos;
+		if(it.path.size() == 0){
+			Spawn *spawn = [](int owner){
+				for(auto& it : spawns)
+					if(it.owner == owner)
+						return &it;
+				return (Spawn*)NULL;
+			}(it.owner);
+			if(spawn)
+				it.path = findPath(it.pos, spawn->pos);
+		}
+		if(it.path.size()){
+			RoomPosition newPos = it.path.back().pos;
+			if(isBlocked(newPos))
+				continue;
+			it.path.pop_back();
+			it.pos = newPos;
+		}
+		else{
+			RoomPosition newPos(it.pos.x + rand() % 3 - 1, it.pos.y + rand() % 3 - 1);
+			if(isBlocked(newPos))
+				continue;
+			it.pos = newPos;
+		}
 	}
 	this->Refresh();
 }
