@@ -93,6 +93,7 @@ const int ROOMSIZE = 50;
 static Tile room[ROOMSIZE][ROOMSIZE] = {0};
 static std::list<Creep> creeps;
 static std::list<Spawn> spawns;
+static Creep *selected;
 
 std::vector<PathNode> findPath(const RoomPosition& from, const RoomPosition& to){
 	auto internal = [to](){
@@ -196,18 +197,26 @@ double perlin_noise_pixel(int x, int y, int bit){
 
 
 class wxGLCanvasSubClass: public wxGLCanvas {
+	GLdouble lastTransform[16];
 	void Render();
 public:
 	wxGLCanvasSubClass(wxFrame* parent);
 	void Paintit(wxPaintEvent& event);
 	void timer(wxTimerEvent& event);
+	void OnClick(wxMouseEvent&);
 protected:
 	DECLARE_EVENT_TABLE()
+};
+
+enum{
+	ID_SELECT_NAME = 1,
+	ID_SELECT_POS = 2
 };
 
 BEGIN_EVENT_TABLE(wxGLCanvasSubClass, wxGLCanvas)
 EVT_PAINT    (wxGLCanvasSubClass::Paintit)
 EVT_TIMER    (0, wxGLCanvasSubClass::timer)
+EVT_LEFT_DOWN(wxGLCanvasSubClass::OnClick)
 END_EVENT_TABLE()
 
 wxGLCanvasSubClass::wxGLCanvasSubClass(wxFrame *parent)
@@ -270,6 +279,20 @@ void wxGLCanvasSubClass::timer(wxTimerEvent&){
 			it.pos = newPos;
 		}
 	}
+
+	if(selected){
+		wxStaticText *stc = static_cast<wxStaticText*>(this->GetParent()->GetWindowChild(ID_SELECT_NAME));
+		if(stc){
+			wxString str = "Selected: " + wxString::Format("Creep %p", selected);
+			stc->SetLabelText(str);
+		}
+
+		stc = static_cast<wxStaticText*>(this->GetParent()->GetWindowChild(ID_SELECT_POS));
+		if(stc){
+			stc->SetLabelText(wxString::Format("Pos: %d, %d", selected->pos.x, selected->pos.y));
+		}
+	}
+
 	this->Refresh();
 }
 
@@ -289,6 +312,9 @@ void wxGLCanvasSubClass::Render()
 	glPushMatrix();
 	glScaled(2. / ROOMSIZE, 2. / ROOMSIZE, 1);
 	glTranslated(-ROOMSIZE / 2 + .5, -ROOMSIZE / 2 + .5, 0);
+
+	glGetDoublev(GL_MODELVIEW_MATRIX, lastTransform);
+
 	glBegin(GL_QUADS);
 	for(int i = 0; i < ROOMSIZE; i++){
 		for(int j = 0; j < ROOMSIZE; j++){
@@ -301,7 +327,7 @@ void wxGLCanvasSubClass::Render()
 	}
 	glEnd();
 
-	for(auto it : creeps){
+	for(auto& it : creeps){
 		glBegin(GL_POLYGON);
 		glColor3f(0, 0, 0);
 		for(int j = 0; j < 32; j++){
@@ -317,6 +343,17 @@ void wxGLCanvasSubClass::Render()
 			glVertex2d(.3 * cos(angle) + it.pos.x, .3 * sin(angle) + it.pos.y);
 		}
 		glEnd();
+
+		if(selected == &it){
+			glColor4f(1,1,0,1);
+			glLineWidth(3);
+			glBegin(GL_LINE_LOOP);
+			for(int j = 0; j < 32; j++){
+				double angle = j * 2. * M_PI / 32;
+				glVertex2d(0.7 * cos(angle) + it.pos.x, .7 * sin(angle) + it.pos.y);
+			}
+			glEnd();
+		}
 	}
 
 	for(auto it : spawns){
@@ -348,6 +385,19 @@ void wxGLCanvasSubClass::Render()
 
 	glFlush();
 	SwapBuffers();
+}
+
+void wxGLCanvasSubClass::OnClick(wxMouseEvent& evt){
+	double vx = (double)evt.GetX() / GetSize().x;
+	double vy = (double)evt.GetY() / GetSize().y;
+	int x = int((vx) * ROOMSIZE);
+	int y = int((vy) * ROOMSIZE);
+	for(auto& it : creeps){
+		if(it.pos.x == x && it.pos.y == y){
+			selected = &it;
+			break;
+		}
+	}
 }
 
 class MyApp: public wxApp
@@ -391,10 +441,25 @@ bool MyApp::OnInit()
 		spawns.push_back(Spawn(x, y, i));
 	}
 
-	wxFrame *frame = new wxFrame((wxFrame *)NULL, -1,  wxT("Hello GL World"), wxPoint(50,50), wxSize(640,640));
+	const int rightPanelWidth = 300;
+
+	wxFrame *frame = new wxFrame((wxFrame *)NULL, -1,  wxT("Hello GL World"), wxPoint(50,50), wxSize(640+rightPanelWidth,640));
 
 	MyApp &app = wxGetApp();
 	app.MyGLCanvas = new wxGLCanvasSubClass(frame);
+
+	wxPanel *rightPanel = new wxPanel(frame, -1, wxPoint(150, 100), wxSize(rightPanelWidth,150));
+	rightPanel->SetBackgroundColour(wxColour(63, 63, 63));
+	rightPanel->SetForegroundColour(wxColour(255,255,255));
+
+	wxStaticText *roomLabel = new wxStaticText(rightPanel, -1, wxT("ROOM ????"));
+	new wxStaticText(rightPanel, ID_SELECT_NAME, "No Selection", wxPoint(20, 30));
+	new wxStaticText(rightPanel, ID_SELECT_POS, "", wxPoint(20, 50));
+
+	wxBoxSizer *sizer = new wxBoxSizer(wxHORIZONTAL);
+	sizer->Add(app.MyGLCanvas, 1, wxEXPAND | wxALL);
+	sizer->Add(rightPanel, 0, wxEXPAND | wxRIGHT);
+	frame->SetSizer(sizer);
 
 	int nonmain(int argc, char *argv[]);
 	nonmain(0, NULL);
