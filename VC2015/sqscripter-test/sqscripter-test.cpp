@@ -203,7 +203,6 @@ class wxGLCanvasSubClass: public wxGLCanvas {
 public:
 	wxGLCanvasSubClass(wxFrame* parent);
 	void Paintit(wxPaintEvent& event);
-	void timer(wxTimerEvent& event);
 	void OnClick(wxMouseEvent&);
 protected:
 	DECLARE_EVENT_TABLE()
@@ -217,7 +216,6 @@ enum{
 
 BEGIN_EVENT_TABLE(wxGLCanvasSubClass, wxGLCanvas)
 EVT_PAINT    (wxGLCanvasSubClass::Paintit)
-EVT_TIMER    (0, wxGLCanvasSubClass::timer)
 EVT_LEFT_DOWN(wxGLCanvasSubClass::OnClick)
 END_EVENT_TABLE()
 
@@ -235,6 +233,43 @@ wxGLCanvasSubClass::wxGLCanvasSubClass(wxFrame *parent)
 //	glutInit(&argc, argv);
 }
 
+class MainFrame : public wxFrame{
+	void OnClose(wxCloseEvent&);
+public:
+	using wxFrame::wxFrame;
+	~MainFrame()override;
+	void update();
+
+protected:
+	DECLARE_EVENT_TABLE()
+};
+
+BEGIN_EVENT_TABLE(MainFrame, wxFrame)
+EVT_CLOSE    (MainFrame::OnClose)
+END_EVENT_TABLE()
+
+
+
+class MyApp: public wxApp
+{
+	bool OnInit()override;
+	int OnExit()override{
+		return 0;
+	}
+	wxGLCanvas * MyGLCanvas;
+public:
+	MainFrame* mainFrame;
+	wxTimer animTimer;
+	void timer(wxTimerEvent&);
+protected:
+	DECLARE_EVENT_TABLE()
+};
+
+BEGIN_EVENT_TABLE(MyApp, wxApp)
+EVT_TIMER    (0, MyApp::timer)
+END_EVENT_TABLE()
+
+IMPLEMENT_APP(MyApp)
 
 
 void wxGLCanvasSubClass::Paintit(wxPaintEvent& WXUNUSED(event)){
@@ -255,7 +290,7 @@ bool isBlocked(const RoomPosition &pos){
 	return false;
 }
 
-void wxGLCanvasSubClass::timer(wxTimerEvent&){
+void MyApp::timer(wxTimerEvent&){
 	for(auto& it : creeps){
 		if(it.path.size() == 0){
 			Spawn *spawn = [](int owner){
@@ -282,26 +317,39 @@ void wxGLCanvasSubClass::timer(wxTimerEvent&){
 		}
 	}
 
-	wxStaticText *stc = static_cast<wxStaticText*>(this->GetParent()->GetWindowChild(ID_TIME));
+	// Separating definition of MyApp::timer and MainFrame::update enables us to run the simulation
+	// without windows or graphics, hopefully in the future.
+	if(mainFrame)
+		mainFrame->update();
+}
+
+MainFrame::~MainFrame()
+{
+	// Clear the dangling pointer to prevent cleanup codes from accidentally dereferencing
+	wxGetApp().mainFrame = nullptr;
+}
+
+void MainFrame::update(){
+	wxStaticText *stc = static_cast<wxStaticText*>(GetWindowChild(ID_TIME));
 	if(stc){
 		wxString str = "Time: " + wxString::Format("%d", global_time);
 		stc->SetLabelText(str);
 	}
 
 	if(selected){
-		stc = static_cast<wxStaticText*>(this->GetParent()->GetWindowChild(ID_SELECT_NAME));
+		stc = static_cast<wxStaticText*>(GetWindowChild(ID_SELECT_NAME));
 		if(stc){
 			wxString str = "Selected: " + wxString::Format("Creep %p", selected);
 			stc->SetLabelText(str);
 		}
 
-		stc = static_cast<wxStaticText*>(this->GetParent()->GetWindowChild(ID_SELECT_POS));
+		stc = static_cast<wxStaticText*>(GetWindowChild(ID_SELECT_POS));
 		if(stc){
 			stc->SetLabelText(wxString::Format("Pos: %d, %d", selected->pos.x, selected->pos.y));
 		}
 	}
 
-	this->Refresh();
+	Refresh();
 
 	global_time++;
 }
@@ -410,16 +458,12 @@ void wxGLCanvasSubClass::OnClick(wxMouseEvent& evt){
 	}
 }
 
-class MyApp: public wxApp
-{
-	virtual bool OnInit();
-	wxGLCanvas * MyGLCanvas;
-	wxTimer animTimer;
-};
 
 
-IMPLEMENT_APP(MyApp)
-
+void MainFrame::OnClose(wxCloseEvent&){
+	wxGetApp().animTimer.Stop();
+	Destroy();
+}
 
 
 
@@ -453,10 +497,11 @@ bool MyApp::OnInit()
 
 	const int rightPanelWidth = 300;
 
-	wxFrame *frame = new wxFrame((wxFrame *)NULL, -1,  wxT("Hello GL World"), wxPoint(50,50), wxSize(640+rightPanelWidth,640));
+	MainFrame *frame = new MainFrame((wxFrame *)NULL, -1,  wxT("Hello GL World"), wxPoint(50,50), wxSize(640+rightPanelWidth,640));
 
 	MyApp &app = wxGetApp();
 	app.MyGLCanvas = new wxGLCanvasSubClass(frame);
+	app.mainFrame = frame;
 
 	wxPanel *rightPanel = new wxPanel(frame, -1, wxPoint(150, 100), wxSize(rightPanelWidth,150));
 	rightPanel->SetBackgroundColour(wxColour(47, 47, 47));
@@ -500,7 +545,7 @@ bool MyApp::OnInit()
 	nonmain(0, NULL);
 
 	frame->Show(TRUE);
-	app.animTimer.SetOwner(wxGetApp().MyGLCanvas, 0);
+	app.animTimer.SetOwner(&app, 0);
 	app.animTimer.Start(100);
 	return TRUE;
 }
