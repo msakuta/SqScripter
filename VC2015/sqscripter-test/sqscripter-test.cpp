@@ -94,6 +94,7 @@ static Tile room[ROOMSIZE][ROOMSIZE] = {0};
 static std::list<Creep> creeps;
 static std::list<Spawn> spawns;
 static Creep *selected;
+static int global_time = 0;
 
 std::vector<PathNode> findPath(const RoomPosition& from, const RoomPosition& to){
 	auto internal = [to](){
@@ -210,7 +211,8 @@ protected:
 
 enum{
 	ID_SELECT_NAME = 1,
-	ID_SELECT_POS = 2
+	ID_SELECT_POS = 2,
+	ID_TIME
 };
 
 BEGIN_EVENT_TABLE(wxGLCanvasSubClass, wxGLCanvas)
@@ -280,8 +282,14 @@ void wxGLCanvasSubClass::timer(wxTimerEvent&){
 		}
 	}
 
+	wxStaticText *stc = static_cast<wxStaticText*>(this->GetParent()->GetWindowChild(ID_TIME));
+	if(stc){
+		wxString str = "Time: " + wxString::Format("%d", global_time);
+		stc->SetLabelText(str);
+	}
+
 	if(selected){
-		wxStaticText *stc = static_cast<wxStaticText*>(this->GetParent()->GetWindowChild(ID_SELECT_NAME));
+		stc = static_cast<wxStaticText*>(this->GetParent()->GetWindowChild(ID_SELECT_NAME));
 		if(stc){
 			wxString str = "Selected: " + wxString::Format("Creep %p", selected);
 			stc->SetLabelText(str);
@@ -294,6 +302,8 @@ void wxGLCanvasSubClass::timer(wxTimerEvent&){
 	}
 
 	this->Refresh();
+
+	global_time++;
 }
 
 void wxGLCanvasSubClass::Render()
@@ -449,12 +459,37 @@ bool MyApp::OnInit()
 	app.MyGLCanvas = new wxGLCanvasSubClass(frame);
 
 	wxPanel *rightPanel = new wxPanel(frame, -1, wxPoint(150, 100), wxSize(rightPanelWidth,150));
-	rightPanel->SetBackgroundColour(wxColour(63, 63, 63));
+	rightPanel->SetBackgroundColour(wxColour(47, 47, 47));
 	rightPanel->SetForegroundColour(wxColour(255,255,255));
 
-	wxStaticText *roomLabel = new wxStaticText(rightPanel, -1, wxT("ROOM ????"));
-	new wxStaticText(rightPanel, ID_SELECT_NAME, "No Selection", wxPoint(20, 30));
-	new wxStaticText(rightPanel, ID_SELECT_POS, "", wxPoint(20, 50));
+	wxPanel *roomPanel = new wxPanel(rightPanel, -1);
+	roomPanel->SetForegroundColour(wxColour(255,255,255));
+	roomPanel->SetBackgroundColour(wxColour(63,63,63));
+	wxStaticText *roomLabel = new wxStaticText(roomPanel, -1, wxT("ROOM ????"));
+	wxFont titleFont = roomLabel->GetFont();
+	titleFont.SetPointSize(12);
+	titleFont.MakeBold();
+	roomLabel->SetFont(titleFont);
+
+	wxPanel *gamePanel = new wxPanel(rightPanel, -1);
+	gamePanel->SetForegroundColour(wxColour(255,255,255));
+	wxStaticText *gameTitle = new wxStaticText(gamePanel, -1, "Game World", wxPoint(20, 30));
+	gameTitle->SetFont(titleFont);
+	gameTitle->SetBackgroundColour(wxColour(63,63,63));
+	new wxStaticText(gamePanel, ID_TIME, "", wxPoint(20, 60));
+
+	wxPanel *selectionPanel = new wxPanel(rightPanel, -1);
+	selectionPanel->SetForegroundColour(wxColour(255,255,255));
+	wxStaticText *selectName = new wxStaticText(selectionPanel, ID_SELECT_NAME, "No Selection", wxPoint(20, 30));
+	selectName->SetFont(titleFont);
+	selectName->SetBackgroundColour(wxColour(63,63,63));
+	new wxStaticText(selectionPanel, ID_SELECT_POS, "", wxPoint(20, 60));
+
+	wxBoxSizer *rightSizer = new wxBoxSizer(wxVERTICAL);
+	rightSizer->Add(roomPanel, 0, wxEXPAND);
+	rightSizer->Add(gamePanel, 0, wxEXPAND);
+	rightSizer->Add(selectionPanel, 0, wxEXPAND);
+	rightPanel->SetSizer(rightSizer);
 
 	wxBoxSizer *sizer = new wxBoxSizer(wxHORIZONTAL);
 	sizer->Add(app.MyGLCanvas, 1, wxEXPAND | wxALL);
