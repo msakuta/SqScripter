@@ -558,12 +558,9 @@ static void RunProc(const char *fileName, const char *content){
 static void SqPrintFunc(HSQUIRRELVM v, const SQChar *s, ...){
 	va_list vl;
 	va_start(vl, s);
-	char buf[2048];
-	char mbs[1024];
-	wcstombs(mbs, s, sizeof mbs);
-	vsprintf_s(buf, mbs, vl);
-	strcat_s(buf, "\n"); // Add line break
-	PrintProc(sw, buf);
+	wxString str = wxString::FormatV(s, vl);
+	str.append(L"\n");
+	PrintProc(sw, str.mbc_str());
 	va_end(vl);
 }
 
