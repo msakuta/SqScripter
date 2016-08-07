@@ -95,6 +95,8 @@ static std::list<Creep> creeps;
 static std::list<Spawn> spawns;
 static Creep *selected;
 static int global_time = 0;
+/// The Squirrel virtual machine
+static HSQUIRRELVM sqvm;
 
 std::vector<PathNode> findPath(const RoomPosition& from, const RoomPosition& to){
 	auto internal = [to](){
@@ -291,6 +293,16 @@ bool isBlocked(const RoomPosition &pos){
 }
 
 void MyApp::timer(wxTimerEvent&){
+	SQInteger stack = sq_gettop(sqvm);
+	sq_pushroottable(sqvm);
+	sq_pushstring(sqvm, _SC("main"), -1);
+	if(SQ_SUCCEEDED(sq_get(sqvm, -2))){
+		sq_pushroottable(sqvm);
+		sq_call(sqvm, 1, SQFalse, SQTrue);
+	}
+	if(stack < sq_gettop(sqvm))
+		sq_pop(sqvm, sq_gettop(sqvm) - stack);
+
 	for(auto& it : creeps){
 		if(it.path.size() == 0){
 			Spawn *spawn = [](int owner){
@@ -557,8 +569,6 @@ static void (*PrintProc)(ScripterWindow *, const char *) = NULL;
 /// ScripterWindow object handle.  It represents single SqScripter window.
 static ScripterWindow *sw = NULL;
 
-/// The Squirrel virtual machine
-static HSQUIRRELVM sqvm;
 
 /// Function to handle commands come from the command line (the single line edit at the bottom of the window).
 /// "Commands" mean anything, but it would be good to use for interactive scripting like Python or irb
@@ -610,13 +620,13 @@ static void SqPrintFunc(HSQUIRRELVM v, const SQChar *s, ...){
 }
 
 static SQInteger SqError(HSQUIRRELVM v){
-	std::stringstream ss;
+	wxString ss;
 	const SQChar *desc;
 	if(SQ_SUCCEEDED(sq_getstring(v, 2, &desc)))
 		ss << "Runtime error: " << desc;
 	else
 		ss << "Runtime error: Unknown";
-	PrintProc(sw, ss.str().c_str());
+	PrintProc(sw, ss.mbc_str());
 	return SQInteger(0);
 }
 
@@ -635,6 +645,22 @@ static void OnClose(ScripterWindow *sc){
 	scripter_delete(sc);
 	PostQuitMessage(0);
 }
+
+struct Game{
+	static SQInteger sqf_get(HSQUIRRELVM v){
+		const SQChar *key;
+		if(SQ_FAILED(sq_getstring(v, -1, &key)))
+			return sq_throwerror(v, _SC("get key is missing"));
+		if(!scstrcmp(key, _SC("time"))){
+			sq_pushinteger(v, global_time);
+			return 1;
+		}
+		else
+			return sq_throwerror(v, _SC("Index not found"));
+	}
+};
+
+static Game game;
 
 /// The starting point for this demonstration program.
 int nonmain(int argc, char *argv[])
@@ -666,6 +692,17 @@ int nonmain(int argc, char *argv[])
 	sqstd_register_mathlib(sqvm);
 	sqstd_register_stringlib(sqvm);
 	sqstd_register_systemlib(sqvm);
+	sq_pushstring(sqvm, _SC("Game"), -1);
+		sq_newclass(sqvm, SQFalse);
+		sq_settypetag(sqvm, -1, "Game");
+		sq_pushstring(sqvm, _SC("_get"), -1);
+		sq_newclosure(sqvm, &Game::sqf_get, 0);
+		sq_newslot(sqvm, -3, SQTrue);
+	// Register the singleton instance instead of the class
+	// because _get() method only works for instances.
+	sq_createinstance(sqvm, -1);
+	sq_remove(sqvm, -2);
+	sq_newslot(sqvm, -3, SQFalse);
 	sq_poptop(sqvm);
 
 	// Show the window on screen
