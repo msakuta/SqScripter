@@ -546,7 +546,7 @@ void wxGLCanvasSubClass::Render()
 
 void wxGLCanvasSubClass::OnClick(wxMouseEvent& evt){
 	double vx = (double)evt.GetX() / GetSize().x;
-	double vy = (double)evt.GetY() / GetSize().y;
+	double vy = 1. - (double)evt.GetY() / GetSize().y;
 	int x = int((vx) * ROOMSIZE);
 	int y = int((vy) * ROOMSIZE);
 	for(auto& it : creeps){
