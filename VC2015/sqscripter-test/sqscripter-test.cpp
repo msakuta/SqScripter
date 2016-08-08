@@ -91,6 +91,7 @@ struct Creep : public RoomObject{
 	int owner;
 
 	Creep(int x, int y, int owner) : RoomObject(x, y), owner(owner){}
+	static SQInteger sqf_move(HSQUIRRELVM v);
 };
 
 struct Spawn : public RoomObject{
@@ -273,6 +274,7 @@ class MyApp: public wxApp
 public:
 	MainFrame* mainFrame;
 	wxTimer animTimer;
+	wxMutex mutex;
 	void timer(wxTimerEvent&);
 protected:
 	DECLARE_EVENT_TABLE()
@@ -284,6 +286,30 @@ END_EVENT_TABLE()
 
 IMPLEMENT_APP(MyApp)
 
+
+SQInteger Creep::sqf_move(HSQUIRRELVM v){
+	wxMutexLocker ml(wxGetApp().mutex);
+	SQUserPointer p;
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &p, nullptr)))
+		return sq_throwerror(v, _SC("Broken Creep instance"));
+	SQInteger i;
+	if(SQ_FAILED(sq_getinteger(v, 2, &i)) || i < TOP || TOP_LEFT < i)
+		return sq_throwerror(v, _SC("Invalid Creep.move argument"));
+	static int deltas[8][2] = {
+		{0,-1}, // TOP = 1,
+		{1,-1}, // TOP_RIGHT = 2,
+		{1,0}, // RIGHT = 3,
+		{1,1}, // BOTTOM_RIGHT = 4,
+		{0,1}, // BOTTOM = 5,
+		{-1,1}, // BOTTOM_LEFT = 6,
+		{-1,0}, // LEFT = 7,
+		{-1,-1}, // TOP_LEFT = 8,
+	};
+	Creep *creep = static_cast<Creep*>(p);
+	creep->pos.x += deltas[i-1][0];
+	creep->pos.y += deltas[i-1][1];
+	return 0;
+}
 
 void wxGLCanvasSubClass::Paintit(wxPaintEvent& WXUNUSED(event)){
 	Render();
@@ -304,15 +330,18 @@ bool isBlocked(const RoomPosition &pos){
 }
 
 void MyApp::timer(wxTimerEvent&){
-	SQInteger stack = sq_gettop(sqvm);
-	sq_pushroottable(sqvm);
-	sq_pushstring(sqvm, _SC("main"), -1);
-	if(SQ_SUCCEEDED(sq_get(sqvm, -2))){
+	{
+		wxMutexLocker ml(wxGetApp().mutex);
+		SQInteger stack = sq_gettop(sqvm);
 		sq_pushroottable(sqvm);
-		sq_call(sqvm, 1, SQFalse, SQTrue);
+		sq_pushstring(sqvm, _SC("main"), -1);
+		if(SQ_SUCCEEDED(sq_get(sqvm, -2))){
+			sq_pushroottable(sqvm);
+			sq_call(sqvm, 1, SQFalse, SQTrue);
+		}
+		if(stack < sq_gettop(sqvm))
+			sq_pop(sqvm, sq_gettop(sqvm) - stack);
 	}
-	if(stack < sq_gettop(sqvm))
-		sq_pop(sqvm, sq_gettop(sqvm) - stack);
 
 	for(auto& it : creeps){
 /*		if(it.path.size() == 0){
@@ -588,6 +617,7 @@ void CmdProc(const char *cmd){
 	scripter_clearerror(sw);
 	wchar_t wcmd[256];
 	mbstowcs(wcmd, cmd, sizeof wcmd/sizeof*wcmd);
+	wxMutexLocker ml(wxGetApp().mutex);
 	if(SQ_FAILED(sq_compilebuffer(sqvm, wcmd, wcslen(wcmd), _SC("command"), SQTrue))){
 		sq_pop(sqvm, sq_gettop(sqvm) - oldStack);
 		return;
@@ -609,6 +639,7 @@ static void RunProc(const char *fileName, const char *content){
 	size_t wlen = strlen(content)*4+1;
 	std::vector<wchar_t> wcontent(wlen);
 	mbstowcs(&wcontent.front(), content, wlen);
+	wxMutexLocker ml(wxGetApp().mutex);
 	if(SQ_FAILED(sq_compilebuffer(sqvm, &wcontent.front(), wcslen(&wcontent.front()), wfileName, SQTrue))){
 		sq_pop(sqvm, sq_gettop(sqvm) - oldStack);
 		return;
@@ -659,6 +690,7 @@ static void OnClose(ScripterWindow *sc){
 
 struct Game{
 	static SQInteger sqf_get(HSQUIRRELVM v){
+		wxMutexLocker ml(wxGetApp().mutex);
 		const SQChar *key;
 		if(SQ_FAILED(sq_getstring(v, -1, &key)))
 			return sq_throwerror(v, _SC("get key is missing"));
