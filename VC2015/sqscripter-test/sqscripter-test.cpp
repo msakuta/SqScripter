@@ -75,6 +75,17 @@ struct RoomObject{
 	RoomObject(int x, int y) : pos(x, y){}
 };
 
+enum Direction{
+	TOP = 1,
+	TOP_RIGHT = 2,
+	RIGHT = 3,
+	BOTTOM_RIGHT = 4,
+	BOTTOM = 5,
+	BOTTOM_LEFT = 6,
+	LEFT = 7,
+	TOP_LEFT = 8,
+};
+
 struct Creep : public RoomObject{
 	Path path;
 	int owner;
@@ -304,7 +315,7 @@ void MyApp::timer(wxTimerEvent&){
 		sq_pop(sqvm, sq_gettop(sqvm) - stack);
 
 	for(auto& it : creeps){
-		if(it.path.size() == 0){
+/*		if(it.path.size() == 0){
 			Spawn *spawn = [](int owner){
 				for(auto& it : spawns)
 					if(it.owner == owner)
@@ -326,7 +337,7 @@ void MyApp::timer(wxTimerEvent&){
 			if(isBlocked(newPos))
 				continue;
 			it.pos = newPos;
-		}
+		}*/
 	}
 
 	// Separating definition of MyApp::timer and MainFrame::update enables us to run the simulation
@@ -489,7 +500,7 @@ bool MyApp::OnInit()
 		}
 	}
 
-	for(int i = 0; i < 20; i++){
+	for(int i = 0; i < 6; i++){
 		int x, y;
 		do{
 			x = rand() % ROOMSIZE;
@@ -655,6 +666,24 @@ struct Game{
 			sq_pushinteger(v, global_time);
 			return 1;
 		}
+		else if(!scstrcmp(key, _SC("creeps"))){
+			size_t sz = creeps.size();
+			SQInteger i = 0;
+			sq_newarray(v, sz);
+			for(auto& it : creeps){
+				sq_pushroottable(v); // root
+				sq_pushstring(v, _SC("Creep"), -1); // root "Creep"
+				if(SQ_FAILED(sq_get(v, -2))) // root Creep i
+					return sq_throwerror(v, _SC("Failed to create creeps array"));
+				sq_pushinteger(v, i++); // root Creep i
+				sq_createinstance(v, -2); // root Creep i inst
+				sq_setinstanceup(v, -1, &it);
+				if(SQ_FAILED(sq_set(v, -5))) // root Creep
+					return sq_throwerror(v, _SC("Failed to create creeps array"));
+				sq_pop(v, 2);
+			}
+			return 1;
+		}
 		else
 			return sq_throwerror(v, _SC("Index not found"));
 	}
@@ -703,6 +732,15 @@ int nonmain(int argc, char *argv[])
 	sq_createinstance(sqvm, -1);
 	sq_remove(sqvm, -2);
 	sq_newslot(sqvm, -3, SQFalse);
+
+	sq_pushstring(sqvm, _SC("Creep"), -1);
+	sq_newclass(sqvm, SQFalse);
+	sq_settypetag(sqvm, -1, _SC("Creep"));
+	sq_pushstring(sqvm, _SC("move"), -1);
+	sq_newclosure(sqvm, &Creep::sqf_move, 0);
+	sq_newslot(sqvm, -3, SQFalse);
+	sq_newslot(sqvm, -3, SQFalse);
+
 	sq_poptop(sqvm);
 
 	// Show the window on screen
