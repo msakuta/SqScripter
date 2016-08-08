@@ -55,6 +55,8 @@ struct RoomPosition{
 	RoomPosition(int x, int y) : x(x), y(y){}
 	bool operator==(const RoomPosition& o)const{return x == o.x && y == o.y;}
 	bool operator!=(const RoomPosition& o)const{return !(*this == o);}
+
+	static SQInteger sqf_get(HSQUIRRELVM v);
 };
 
 struct PathNode{
@@ -91,6 +93,7 @@ struct Creep : public RoomObject{
 	int owner;
 
 	Creep(int x, int y, int owner) : RoomObject(x, y), owner(owner){}
+	static SQInteger sqf_get(HSQUIRRELVM v);
 	static SQInteger sqf_move(HSQUIRRELVM v);
 };
 
@@ -286,6 +289,50 @@ END_EVENT_TABLE()
 
 IMPLEMENT_APP(MyApp)
 
+SQInteger RoomPosition::sqf_get(HSQUIRRELVM v)
+{
+	SQUserPointer up;
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, nullptr)))
+		return sq_throwerror(v, _SC("Invalid this pointer"));
+	RoomPosition *pos = static_cast<RoomPosition*>(up);
+	const SQChar *key;
+	if(SQ_FAILED(sq_getstring(v, 2, &key)))
+		return sq_throwerror(v, _SC("Broken key in _get"));
+	if(!scstrcmp(key, _SC("x"))){
+		sq_pushinteger(v, pos->x);
+		return 1;
+	}	
+	else if(!scstrcmp(key, _SC("y"))){
+		sq_pushinteger(v, pos->y);
+		return 1;
+	}	
+	else
+		return sq_throwerror(v, _SC("Couldn't find key"));
+}
+
+SQInteger Creep::sqf_get(HSQUIRRELVM v){
+	wxMutexLocker ml(wxGetApp().mutex);
+	SQUserPointer up;
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, nullptr)))
+		return sq_throwerror(v, _SC("Invalid this pointer"));
+	Creep *creep = static_cast<Creep*>(up);
+	const SQChar *key;
+	if(SQ_FAILED(sq_getstring(v, 2, &key)))
+		return sq_throwerror(v, _SC("Broken key in _get"));
+	if(!scstrcmp(key, _SC("pos"))){
+		sq_pushroottable(v);
+		sq_pushstring(v, _SC("RoomPosition"), -1);
+		if(SQ_FAILED(sq_get(v, -2)))
+			return sq_throwerror(v, _SC("Can't find RoomPosition class definition"));
+		sq_createinstance(v, -1);
+		sq_getinstanceup(v, -1, &up, nullptr);
+		RoomPosition *rp = static_cast<RoomPosition*>(up);
+		*rp = creep->pos;
+		return 1;
+	}
+	else
+		return sq_throwerror(v, _SC("Couldn't find key"));
+}
 
 SQInteger Creep::sqf_move(HSQUIRRELVM v){
 	wxMutexLocker ml(wxGetApp().mutex);
@@ -770,6 +817,18 @@ int nonmain(int argc, char *argv[])
 	sq_settypetag(sqvm, -1, _SC("Creep"));
 	sq_pushstring(sqvm, _SC("move"), -1);
 	sq_newclosure(sqvm, &Creep::sqf_move, 0);
+	sq_newslot(sqvm, -3, SQFalse);
+	sq_pushstring(sqvm, _SC("_get"), -1);
+	sq_newclosure(sqvm, &Creep::sqf_get, 0);
+	sq_newslot(sqvm, -3, SQFalse);
+	sq_newslot(sqvm, -3, SQFalse);
+
+	sq_pushstring(sqvm, _SC("RoomPosition"), -1);
+	sq_newclass(sqvm, SQFalse);
+	sq_settypetag(sqvm, -1, _SC("RoomPosition"));
+	sq_setclassudsize(sqvm, -1, sizeof(RoomPosition));
+	sq_pushstring(sqvm, _SC("_get"), -1);
+	sq_newclosure(sqvm, &RoomPosition::sqf_get, 0);
 	sq_newslot(sqvm, -3, SQFalse);
 	sq_newslot(sqvm, -3, SQFalse);
 
