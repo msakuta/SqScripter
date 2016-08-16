@@ -100,8 +100,30 @@ struct Creep : public RoomObject{
 struct Spawn : public RoomObject{
 	int owner;
 
+	static const SQUserPointer typetag;
+
 	Spawn(int x, int y, int owner) : RoomObject(x, y), owner(owner){}
+
+	static SQInteger sqf_createCreep(HSQUIRRELVM v);
+
+	static SQInteger sqf_get(HSQUIRRELVM v);
+
+	static void sq_define(HSQUIRRELVM v){
+		sq_pushstring(v, _SC("Spawn"), -1);
+		sq_newclass(v, SQFalse);
+		sq_settypetag(v, -1, typetag);
+		sq_pushstring(v, _SC("createCreep"), -1);
+		sq_newclosure(v, &sqf_createCreep, 0);
+		sq_newslot(v, -3, SQFalse);
+		sq_pushstring(v, _SC("_get"), -1);
+		sq_newclosure(v, &Creep::sqf_get, 0);
+		sq_newslot(v, -3, SQFalse);
+		sq_newslot(v, -3, SQFalse);
+
+	}
 };
+
+const SQUserPointer Spawn::typetag = _SC("Spawn");
 
 const int ROOMSIZE = 50;
 
@@ -357,6 +379,33 @@ SQInteger Creep::sqf_move(HSQUIRRELVM v){
 	creep->pos.y += deltas[i-1][1];
 	return 0;
 }
+
+SQInteger Spawn::sqf_get(HSQUIRRELVM v){
+	wxMutexLocker ml(wxGetApp().mutex);
+	SQUserPointer up;
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, nullptr)))
+		return sq_throwerror(v, _SC("Invalid this pointer for Spawn"));
+	Spawn *spawn = static_cast<Spawn*>(up);
+	const SQChar *key;
+	if(SQ_FAILED(sq_getstring(v, 2, &key)))
+		return sq_throwerror(v, _SC("Broken key in _get"));
+	if(!scstrcmp(key, _SC("pos"))){
+		sq_pushroottable(v);
+		sq_pushstring(v, _SC("RoomPosition"), -1);
+		if(SQ_FAILED(sq_get(v, -2)))
+			return sq_throwerror(v, _SC("Can't find RoomPosition class definition"));
+		sq_createinstance(v, -1);
+		sq_getinstanceup(v, -1, &up, nullptr);
+		RoomPosition *rp = static_cast<RoomPosition*>(up);
+		*rp = spawn->pos;
+		return 1;
+	}
+	else
+		return sq_throwerror(v, _SC("Couldn't find key"));
+}
+
+
+
 
 void wxGLCanvasSubClass::Paintit(wxPaintEvent& WXUNUSED(event)){
 	Render();
@@ -763,6 +812,24 @@ struct Game{
 			}
 			return 1;
 		}
+		else if(!scstrcmp(key, _SC("spawns"))){
+			size_t sz = spawns.size();
+			SQInteger i = 0;
+			sq_newarray(v, sz);
+			for(auto& it : spawns){
+				sq_pushroottable(v); // root
+				sq_pushstring(v, _SC("Spawn"), -1); // root "Spawn"
+				if(SQ_FAILED(sq_get(v, -2))) // root Spawn i
+					return sq_throwerror(v, _SC("Failed to create creeps array"));
+				sq_pushinteger(v, i++); // root Spawn i
+				sq_createinstance(v, -2); // root Spawn i inst
+				sq_setinstanceup(v, -1, &it);
+				if(SQ_FAILED(sq_set(v, -5))) // root Spawn
+					return sq_throwerror(v, _SC("Failed to create creeps array"));
+				sq_pop(v, 2);
+			}
+			return 1;
+		}
 		else
 			return sq_throwerror(v, _SC("Index not found"));
 	}
@@ -823,6 +890,8 @@ int nonmain(int argc, char *argv[])
 	sq_newslot(sqvm, -3, SQFalse);
 	sq_newslot(sqvm, -3, SQFalse);
 
+	Spawn::sq_define(sqvm);
+
 	sq_pushstring(sqvm, _SC("RoomPosition"), -1);
 	sq_newclass(sqvm, SQFalse);
 	sq_settypetag(sqvm, -1, _SC("RoomPosition"));
@@ -856,3 +925,12 @@ int nonmain(int argc, char *argv[])
 	return 0;
 }
 
+SQInteger Spawn::sqf_createCreep(HSQUIRRELVM v)
+{
+	SQUserPointer up;
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, static_cast<SQUserPointer>(typetag))))
+		return sq_throwerror(v, _SC("Invalid this pointer for a spawn"));
+	Spawn *spawn = static_cast<Spawn*>(up);
+	creeps.push_back(Creep(spawn->pos.x, spawn->pos.y-1, spawn->owner));
+	return 0;
+}
