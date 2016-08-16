@@ -108,6 +108,8 @@ struct Spawn : public RoomObject{
 
 	static SQInteger sqf_get(HSQUIRRELVM v);
 
+	static HSQOBJECT spawnClass;
+
 	static void sq_define(HSQUIRRELVM v){
 		sq_pushstring(v, _SC("Spawn"), -1);
 		sq_newclass(v, SQFalse);
@@ -118,12 +120,14 @@ struct Spawn : public RoomObject{
 		sq_pushstring(v, _SC("_get"), -1);
 		sq_newclosure(v, &Creep::sqf_get, 0);
 		sq_newslot(v, -3, SQFalse);
+		sq_getstackobj(v, -1, &spawnClass);
+		sq_addref(v, &spawnClass);
 		sq_newslot(v, -3, SQFalse);
-
 	}
 };
 
 const SQUserPointer Spawn::typetag = _SC("Spawn");
+SQObject Spawn::spawnClass;
 
 const int ROOMSIZE = 50;
 
@@ -815,18 +819,15 @@ struct Game{
 		else if(!scstrcmp(key, _SC("spawns"))){
 			size_t sz = spawns.size();
 			SQInteger i = 0;
-			sq_newarray(v, sz);
+			sq_newarray(v, sz); // array
 			for(auto& it : spawns){
-				sq_pushroottable(v); // root
-				sq_pushstring(v, _SC("Spawn"), -1); // root "Spawn"
-				if(SQ_FAILED(sq_get(v, -2))) // root Spawn i
+				sq_pushobject(v, Spawn::spawnClass); // array Spawn
+				sq_pushinteger(v, i++); // array Spawn i
+				sq_createinstance(v, -2); // array Spawn i inst
+				sq_setinstanceup(v, -1, &it); // array Spawn i inst
+				if(SQ_FAILED(sq_set(v, -4))) // array Spawn
 					return sq_throwerror(v, _SC("Failed to create creeps array"));
-				sq_pushinteger(v, i++); // root Spawn i
-				sq_createinstance(v, -2); // root Spawn i inst
-				sq_setinstanceup(v, -1, &it);
-				if(SQ_FAILED(sq_set(v, -5))) // root Spawn
-					return sq_throwerror(v, _SC("Failed to create creeps array"));
-				sq_pop(v, 2);
+				sq_pop(v, 1); // array
 			}
 			return 1;
 		}
