@@ -16,6 +16,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sqstdlib", "..\squirrel3\sq
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sqscripter-wx", "sqscripter-wx\sqscripter-wx.vcxproj", "{F3742D07-E282-4890-93E0-09D8B33AF855}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wren_lib", "..\wren\util\vs2017\lib\wren_lib.vcxproj", "{D7CC5189-C399-AC94-ECB2-9A3CD8DEE122}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -56,6 +58,14 @@ Global
 		{F3742D07-E282-4890-93E0-09D8B33AF855}.Release|Win32.Build.0 = Release|Win32
 		{F3742D07-E282-4890-93E0-09D8B33AF855}.Release|x64.ActiveCfg = Release|x64
 		{F3742D07-E282-4890-93E0-09D8B33AF855}.Release|x64.Build.0 = Release|x64
+		{D7CC5189-C399-AC94-ECB2-9A3CD8DEE122}.Debug|Win32.ActiveCfg = Debug|Win32
+		{D7CC5189-C399-AC94-ECB2-9A3CD8DEE122}.Debug|Win32.Build.0 = Debug|Win32
+		{D7CC5189-C399-AC94-ECB2-9A3CD8DEE122}.Debug|x64.ActiveCfg = Debug|x64
+		{D7CC5189-C399-AC94-ECB2-9A3CD8DEE122}.Debug|x64.Build.0 = Debug|x64
+		{D7CC5189-C399-AC94-ECB2-9A3CD8DEE122}.Release|Win32.ActiveCfg = Release|Win32
+		{D7CC5189-C399-AC94-ECB2-9A3CD8DEE122}.Release|Win32.Build.0 = Release|Win32
+		{D7CC5189-C399-AC94-ECB2-9A3CD8DEE122}.Release|x64.ActiveCfg = Release|x64
+		{D7CC5189-C399-AC94-ECB2-9A3CD8DEE122}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

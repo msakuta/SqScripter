@@ -77,7 +77,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>../..;../../squirrel3/include;..\..\wx/include;..\..\wx/include\msvc;../../clib/include;$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../..;../../squirrel3/include;..\..\wx/include;..\..\wx/include\msvc;../../clib/include;../../wren/include;$(ProjectDir)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_UNICODE;UNICODE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
@@ -91,13 +91,13 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>../..;../../squirrel3/include;..\..\wx/include;..\..\wx/include\msvc;../../clib/include;$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../..;../../squirrel3/include;..\..\wx/include;..\..\wx/include\msvc;../../clib/include;../../wren/include;$(ProjectDir)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_UNICODE;UNICODE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(OutDir);../../squirrel3/VC2015/$(Platform)/$(Configuration);../../wx\lib\vc_x64_lib\</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sqscripter-wx.lib;squirrel.lib;sqstdlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(OutDir);../../squirrel3/VC2015/$(Platform)/$(Configuration);../../wx\lib\vc_x64_lib\;../../wren/lib</AdditionalLibraryDirectories>
+      <AdditionalDependencies>sqscripter-wx.lib;squirrel.lib;sqstdlib.lib;wren_static_d.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -107,7 +107,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>../..;../../squirrel3/include;..\..\wx/include;..\..\wx/include\msvc;../../clib/include;$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../..;../../squirrel3/include;..\..\wx/include;..\..\wx/include\msvc;../../clib/include;../../wren/include;$(ProjectDir)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_UNICODE;UNICODE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
@@ -125,7 +125,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>../..;../../squirrel3/include;..\..\wx/include;..\..\wx/include\msvc;../../clib/include;$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../..;../../squirrel3/include;..\..\wx/include;..\..\wx/include\msvc;../../clib/include;../../wren/include;$(ProjectDir)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_UNICODE;UNICODE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
