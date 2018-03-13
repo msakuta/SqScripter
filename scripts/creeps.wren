@@ -1,0 +1,1 @@
+Game.print("%(Game.creeps.count)")

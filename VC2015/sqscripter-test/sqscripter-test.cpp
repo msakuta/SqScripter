@@ -968,6 +968,18 @@ static void wrenPrint(WrenVM* vm)
 	PrintProc(sw, s);
 }
 
+static void wrenError(WrenVM* vm,
+	WrenErrorType type,
+	const char* module,
+	int line,
+	const char* message)
+{
+	wxString ss;
+	const SQChar *desc;
+	ss << "Runtime error: " << module << "(" << line << "): " << message << "\n";
+	PrintProc(sw, ss.mbc_str());
+}
+
 static void wrenGetTime(WrenVM* vm)
 {
 	wrenEnsureSlots(vm, 1);
@@ -1009,6 +1021,20 @@ static WrenForeignMethodFn bindForeignMethod(
 					auto cp = creeps.begin();
 					for(int i = 0; i < idx && cp != creeps.end(); ++cp, ++i);
 					*(Creep**)pp = &*cp;
+				};
+			}
+			else if(isStatic && strcmp(signature, "creeps") == 0)
+			{
+				return [](WrenVM* vm){
+					// Slots: [array] main.Creep [instance]
+					wrenEnsureSlots(vm, 3);
+					wrenSetSlotNewList(vm, 0);
+					wrenGetVariable(vm, "main", "Creep", 1);
+					for(auto it = creeps.begin(); it != creeps.end(); ++it){
+						void *pp = wrenSetSlotNewForeign(vm, 2, 1, sizeof(Creep*));
+						*(Creep**)pp = &*it;
+						wrenInsertInList(vm, 0, -1, 2);
+					}
 				};
 			}
 		}
@@ -1089,6 +1115,7 @@ int bind_wren(int argc, char *argv[])
 	wrenInitConfiguration(&config);
 	config.bindForeignMethodFn = bindForeignMethod;
 	config.bindForeignClassFn = bindForeignClass;
+	config.errorFn = wrenError;
 
 	wren = wrenNewVM(&config);
 
@@ -1097,6 +1124,7 @@ int bind_wren(int argc, char *argv[])
 	"	foreign static print(s)\n"
 	"	foreign static time\n"
 	"	foreign static creep(i)\n"
+	"	foreign static creeps\n"
 	"	static main { __main }\n"
 	"	static main=(value) { __main = value }\n"
 	"	static callMain() {\n"
