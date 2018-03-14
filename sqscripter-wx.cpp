@@ -883,17 +883,14 @@ void SqScripterFrame::OnCmdChar(wxKeyEvent& event){
 
 void SqScripterFrame::OnRun(wxCommandEvent& event)
 {
-	wxWindow *w = note->GetCurrentPage();
-	if(!w)
-		return;
-	wxStyledTextCtrl *stc = static_cast<wxStyledTextCtrl*>(w);
+	StyledFileTextCtrl *stc = GetCurrentPage();
 	if(!stc)
 		return;
 
 	wxLog* oldLogger = wxLog::SetActiveTarget(logger);
 	wxStreamToTextRedirector redirect(log);
 	if(wxGetApp().handle && wxGetApp().handle->config.runProc)
-		wxGetApp().handle->config.runProc(fileName, stc->GetText());
+		wxGetApp().handle->config.runProc(stc->fileName, stc->GetText());
 	else
 		wxLogMessage("Run the program");
 	wxLog::SetActiveTarget(oldLogger);
