@@ -749,18 +749,16 @@ void CmdProc(const char *cmd){
 
 /// Function to handle batch exection of a script file.  File name is provided as the first argument if available.
 static void RunProc(const char *fileName, const char *content){
-	SQInteger oldStack = sq_gettop(sqvm);
-	scripter_clearerror(sw);
-	wchar_t wfileName[256];
-	mbstowcs(wfileName, fileName, sizeof wfileName/sizeof*wfileName);
-	size_t wlen = strlen(content)*4+1;
-	std::vector<wchar_t> wcontent(wlen);
-	mbstowcs(&wcontent.front(), content, wlen);
-	wxMutexLocker ml(wxGetApp().mutex);
-	if(wren){
-		wrenInterpret(wren, content);
-	}
-	else{
+	const char *p = strrchr(fileName, '.');
+	if(p && !strcmp(p, ".nut")){
+		SQInteger oldStack = sq_gettop(sqvm);
+		scripter_clearerror(sw);
+		wchar_t wfileName[256];
+		mbstowcs(wfileName, fileName, sizeof wfileName/sizeof*wfileName);
+		size_t wlen = strlen(content)*4+1;
+		std::vector<wchar_t> wcontent(wlen);
+		mbstowcs(&wcontent.front(), content, wlen);
+		wxMutexLocker ml(wxGetApp().mutex);
 		if(SQ_FAILED(sq_compilebuffer(sqvm, &wcontent.front(), wcslen(&wcontent.front()), wfileName, SQTrue))){
 			sq_pop(sqvm, sq_gettop(sqvm) - oldStack);
 			return;
@@ -771,6 +769,9 @@ static void RunProc(const char *fileName, const char *content){
 			return;
 		}
 		sq_pop(sqvm, sq_gettop(sqvm) - oldStack);
+	}
+	else if(wren){
+		wrenInterpret(wren, content);
 	}
 }
 
