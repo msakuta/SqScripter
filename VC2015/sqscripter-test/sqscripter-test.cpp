@@ -93,10 +93,14 @@ enum Direction{
 struct Creep : public RoomObject{
 	Path path;
 	int owner;
+	int id;
+	static int id_gen;
 
-	Creep(int x, int y, int owner) : RoomObject(x, y), owner(owner){}
+	Creep(int x, int y, int owner) : RoomObject(x, y), owner(owner), id(id_gen++){}
 	static SQInteger sqf_get(HSQUIRRELVM v);
 	static SQInteger sqf_move(HSQUIRRELVM v);
+
+	static WrenForeignMethodFn wren_bind(WrenVM* vm, bool isStatic, const char* signature);
 };
 
 struct Spawn : public RoomObject{
@@ -344,6 +348,8 @@ SQInteger RoomPosition::sqf_get(HSQUIRRELVM v)
 		return sq_throwerror(v, _SC("Couldn't find key"));
 }
 
+int Creep::id_gen = 0;
+
 SQInteger Creep::sqf_get(HSQUIRRELVM v){
 	wxMutexLocker ml(wxGetApp().mutex);
 	SQUserPointer up;
@@ -362,6 +368,16 @@ SQInteger Creep::sqf_get(HSQUIRRELVM v){
 		sq_getinstanceup(v, -1, &up, nullptr);
 		RoomPosition *rp = static_cast<RoomPosition*>(up);
 		*rp = creep->pos;
+		return 1;
+	}
+	else if(!scstrcmp(key, _SC("id"))){
+		sq_pushroottable(v);
+		sq_pushinteger(v, creep->id);
+		return 1;
+	}
+	else if(!scstrcmp(key, _SC("owner"))){
+		sq_pushroottable(v);
+		sq_pushinteger(v, creep->owner);
 		return 1;
 	}
 	else
@@ -390,6 +406,70 @@ SQInteger Creep::sqf_move(HSQUIRRELVM v){
 	creep->pos.x += deltas[i-1][0];
 	creep->pos.y += deltas[i-1][1];
 	return 0;
+}
+
+WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * signature)
+{
+	if(!isStatic && !strcmp(signature, "pos")){
+		return [](WrenVM* vm){
+			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			Creep *creep = *pp;
+			wrenEnsureSlots(vm, 2);
+			wrenSetSlotNewList(vm, 0);
+			wrenSetSlotDouble(vm, 1, creep->pos.x);
+			wrenInsertInList(vm, 0, -1, 1);
+			wrenSetSlotDouble(vm, 1, creep->pos.y);
+			wrenInsertInList(vm, 0, -1, 1);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "id")){
+		return [](WrenVM* vm){
+			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			Creep *creep = *pp;
+			wrenEnsureSlots(vm, 1);
+			wrenSetSlotDouble(vm, 0, creep->id);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "owner")){
+		return [](WrenVM* vm){
+			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			Creep *creep = *pp;
+			wrenEnsureSlots(vm, 1);
+			wrenSetSlotDouble(vm, 0, creep->owner);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "move(_)")){
+		return [](WrenVM* vm){
+			wxMutexLocker ml(wxGetApp().mutex);
+			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			Creep *creep = *pp;
+			if(WREN_TYPE_NUM != wrenGetSlotType(vm, 1)){
+				return;
+			}
+			int i = (int)wrenGetSlotDouble(vm, 1);
+			static int deltas[8][2] = {
+				{ 0,-1 }, // TOP = 1,
+				{ 1,-1 }, // TOP_RIGHT = 2,
+				{ 1,0 }, // RIGHT = 3,
+				{ 1,1 }, // BOTTOM_RIGHT = 4,
+				{ 0,1 }, // BOTTOM = 5,
+				{ -1,1 }, // BOTTOM_LEFT = 6,
+				{ -1,0 }, // LEFT = 7,
+				{ -1,-1 }, // TOP_LEFT = 8,
+			};
+			creep->pos.x += deltas[i - 1][0];
+			creep->pos.y += deltas[i - 1][1];
+		};
+	}
+	return nullptr;
 }
 
 SQInteger Spawn::sqf_get(HSQUIRRELVM v){
@@ -451,7 +531,7 @@ void MyApp::timer(wxTimerEvent&){
 			sq_pop(sqvm, sq_gettop(sqvm) - stack);
 
 		// We need to be in this scope!
-		if(whmain && whcall){
+		if(whmain && whcallMain){
 			wrenEnsureSlots(wren, 1);
 			wrenGetVariable(wren, "main", "Game", 0);
 			wrenCall(wren, whcallMain);
@@ -771,7 +851,9 @@ static void RunProc(const char *fileName, const char *content){
 		sq_pop(sqvm, sq_gettop(sqvm) - oldStack);
 	}
 	else if(wren){
+		wxMutexLocker ml(wxGetApp().mutex);
 		wrenInterpret(wren, content);
+		whcallMain = wrenMakeCallHandle(wren, "callMain()"); // Reallocate method call handle since it may have changed by calling wrenInterpret
 	}
 }
 
@@ -797,7 +879,15 @@ static SQInteger SqError(HSQUIRRELVM v){
 
 static void SqCompilerError(HSQUIRRELVM v, const SQChar *desc, const SQChar *source, SQInteger line, SQInteger column){
 	std::stringstream ss;
-	ss << "Compile error on " << source << "(" << line << "," << column << "): " << desc;
+#ifdef SQUNICODE
+	std::vector<char> csource(scstrlen(source)*4+1);
+	wcstombs(csource.data(), source, csource.size());
+	std::vector<char> cdesc(scstrlen(desc) * 4 + 1);
+	wcstombs(cdesc.data(), desc, cdesc.size());
+	ss << "Compile error on " << csource.data() << "(" << line << "," << column << "): " << cdesc.data() << std::endl;
+#else
+	ss << "Compile error on " << source << "(" << line << "," << column << "): " << desc << std::endl;
+#endif
 	PrintProc(sw, ss.str().c_str());
 	char mbdesc[256];
 	wcstombs(mbdesc, desc, sizeof mbdesc/sizeof*mbdesc);
@@ -1041,46 +1131,7 @@ static WrenForeignMethodFn bindForeignMethod(
 		}
 		if(strcmp(className, "Creep") == 0)
 		{
-			if(!isStatic && !strcmp(signature, "pos")){
-				return [](WrenVM* vm){
-					Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
-					if(!pp)
-						return;
-					Creep *creep = *pp;
-					wrenEnsureSlots(vm, 2);
-					wrenSetSlotNewList(vm, 0);
-					wrenSetSlotDouble(vm, 1, creep->pos.x);
-					wrenInsertInList(vm, 0, -1, 1);
-					wrenSetSlotDouble(vm, 1, creep->pos.y);
-					wrenInsertInList(vm, 0, -1, 1);
-				};
-			}
-			else if(!isStatic && !strcmp(signature, "move(_)")){
-				return [](WrenVM* vm){
-					wxMutexLocker ml(wxGetApp().mutex);
-					Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
-					if(!pp)
-						return;
-					Creep *creep = *pp;
-					if(WREN_TYPE_NUM != wrenGetSlotType(vm, 1)){
-						return;
-					}
-					int i = (int)wrenGetSlotDouble(vm, 1);
-					static int deltas[8][2] = {
-						{ 0,-1 }, // TOP = 1,
-						{ 1,-1 }, // TOP_RIGHT = 2,
-						{ 1,0 }, // RIGHT = 3,
-						{ 1,1 }, // BOTTOM_RIGHT = 4,
-						{ 0,1 }, // BOTTOM = 5,
-						{ -1,1 }, // BOTTOM_LEFT = 6,
-						{ -1,0 }, // LEFT = 7,
-						{ -1,-1 }, // TOP_LEFT = 8,
-					};
-					creep->pos.x += deltas[i - 1][0];
-					creep->pos.y += deltas[i - 1][1];
-				};
-			}
-			// Other foreign methods on Math...
+			return Creep::wren_bind(vm, isStatic, signature);
 		}
 	}
 	// Other modules...
@@ -1135,6 +1186,8 @@ int bind_wren(int argc, char *argv[])
 	"foreign class Creep{\n"
 	"	foreign pos\n"
 	"	foreign move(i)\n"
+	"	foreign id\n"
+	"	foreign owner\n"
 	"}\n");
 
 	whmain = wrenMakeCallHandle(wren, "main");
