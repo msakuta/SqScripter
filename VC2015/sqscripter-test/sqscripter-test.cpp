@@ -104,11 +104,15 @@ struct Creep : public RoomObject{
 };
 
 struct Spawn : public RoomObject{
+	typedef Spawn tt;
+
 	int owner;
+	int id;
+	static int id_gen;
 
 	static const SQUserPointer typetag;
 
-	Spawn(int x, int y, int owner) : RoomObject(x, y), owner(owner){}
+	Spawn(int x, int y, int owner) : RoomObject(x, y), owner(owner), id(id_gen++){}
 
 	static SQInteger sqf_createCreep(HSQUIRRELVM v);
 
@@ -130,8 +134,11 @@ struct Spawn : public RoomObject{
 		sq_addref(v, &spawnClass);
 		sq_newslot(v, -3, SQFalse);
 	}
+
+	static WrenForeignMethodFn wren_bind(WrenVM* vm, bool isStatic, const char* signature);
 };
 
+int Spawn::id_gen = 0;
 const SQUserPointer Spawn::typetag = _SC("Spawn");
 SQObject Spawn::spawnClass;
 
@@ -494,6 +501,56 @@ SQInteger Spawn::sqf_get(HSQUIRRELVM v){
 	}
 	else
 		return sq_throwerror(v, _SC("Couldn't find key"));
+}
+
+WrenForeignMethodFn Spawn::wren_bind(WrenVM * vm, bool isStatic, const char * signature)
+{
+	if(!isStatic && !strcmp(signature, "pos")){
+		return [](WrenVM* vm){
+			tt** pp = (tt**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			tt *spawn = *pp;
+			wrenEnsureSlots(vm, 2);
+			wrenSetSlotNewList(vm, 0);
+			wrenSetSlotDouble(vm, 1, spawn->pos.x);
+			wrenInsertInList(vm, 0, -1, 1);
+			wrenSetSlotDouble(vm, 1, spawn->pos.y);
+			wrenInsertInList(vm, 0, -1, 1);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "id")){
+		return [](WrenVM* vm){
+			tt** pp = (tt**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			tt *creep = *pp;
+			wrenEnsureSlots(vm, 1);
+			wrenSetSlotDouble(vm, 0, creep->id);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "owner")){
+		return [](WrenVM* vm){
+			tt** pp = (tt**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			tt *creep = *pp;
+			wrenEnsureSlots(vm, 1);
+			wrenSetSlotDouble(vm, 0, creep->owner);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "createCreep()")){
+		return [](WrenVM* vm){
+			wxMutexLocker ml(wxGetApp().mutex);
+			tt** pp = (tt**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			tt *spawn = *pp;
+
+			creeps.push_back(Creep(spawn->pos.x, spawn->pos.y - 1, spawn->owner));
+		};
+	}
+	return WrenForeignMethodFn();
 }
 
 
@@ -1128,10 +1185,27 @@ static WrenForeignMethodFn bindForeignMethod(
 					}
 				};
 			}
+			else if(isStatic && strcmp(signature, "spawns") == 0){
+				return [](WrenVM* vm){
+					// Slots: [array] main.Creep [instance]
+					wrenEnsureSlots(vm, 3);
+					wrenSetSlotNewList(vm, 0);
+					wrenGetVariable(vm, "main", "Spawn", 1);
+					for(auto it = spawns.begin(); it != spawns.end(); ++it){
+						void *pp = wrenSetSlotNewForeign(vm, 2, 1, sizeof(Spawn*));
+						*(Spawn**)pp = &*it;
+						wrenInsertInList(vm, 0, -1, 2);
+					}
+				};
+			}
 		}
-		if(strcmp(className, "Creep") == 0)
+		else if(strcmp(className, "Creep") == 0)
 		{
 			return Creep::wren_bind(vm, isStatic, signature);
+		}
+		else if(strcmp(className, "Spawn") == 0)
+		{
+			return Spawn::wren_bind(vm, isStatic, signature);
 		}
 	}
 	// Other modules...
@@ -1177,6 +1251,7 @@ int bind_wren(int argc, char *argv[])
 	"	foreign static time\n"
 	"	foreign static creep(i)\n"
 	"	foreign static creeps\n"
+	"	foreign static spawns\n"
 	"	static main { __main }\n"
 	"	static main=(value) { __main = value }\n"
 	"	static callMain() {\n"
@@ -1186,6 +1261,12 @@ int bind_wren(int argc, char *argv[])
 	"foreign class Creep{\n"
 	"	foreign pos\n"
 	"	foreign move(i)\n"
+	"	foreign id\n"
+	"	foreign owner\n"
+	"}\n"
+	"foreign class Spawn{\n"
+	"	foreign pos\n"
+	"	foreign createCreep()\n"
 	"	foreign id\n"
 	"	foreign owner\n"
 	"}\n");
