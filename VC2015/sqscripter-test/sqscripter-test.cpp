@@ -114,6 +114,8 @@ struct Spawn : public RoomObject{
 
 	Spawn(int x, int y, int owner) : RoomObject(x, y), owner(owner), id(id_gen++){}
 
+	bool createCreep();
+
 	static SQInteger sqf_createCreep(HSQUIRRELVM v);
 
 	static SQInteger sqf_get(HSQUIRRELVM v);
@@ -316,6 +318,8 @@ class MyApp: public wxApp
 {
 	bool OnInit()override;
 	int OnExit()override{
+		sq_close(sqvm);
+		wrenFreeVM(wren);
 		return 0;
 	}
 	wxGLCanvas * MyGLCanvas;
@@ -546,8 +550,7 @@ WrenForeignMethodFn Spawn::wren_bind(WrenVM * vm, bool isStatic, const char * si
 			if(!pp)
 				return;
 			tt *spawn = *pp;
-
-			creeps.push_back(Creep(spawn->pos.x, spawn->pos.y - 1, spawn->owner));
+			wrenSetSlotBool(vm, 0, spawn->createCreep());
 		};
 	}
 	return WrenForeignMethodFn();
@@ -1096,14 +1099,35 @@ int nonmain(int argc, char *argv[])
 	return 0;
 }
 
+bool Spawn::createCreep(){
+	static const int directions[4][2] = {
+		{0,-1},
+		{ 1,0 },
+		{0,1},
+		{-1,0}
+	};
+	int i = 0;
+	do{
+		RoomPosition newPos{pos.x + directions[i][0], pos.y + directions[i][1]};
+		if(isBlocked(newPos))
+			continue;
+		creeps.push_back(Creep(newPos.x, newPos.y, owner));
+		return true;
+	}while(++i < numof(directions));
+	return false;
+}
+
 SQInteger Spawn::sqf_createCreep(HSQUIRRELVM v)
 {
 	SQUserPointer up;
 	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, static_cast<SQUserPointer>(typetag))))
 		return sq_throwerror(v, _SC("Invalid this pointer for a spawn"));
 	Spawn *spawn = static_cast<Spawn*>(up);
-	creeps.push_back(Creep(spawn->pos.x, spawn->pos.y-1, spawn->owner));
-	return 0;
+	if(!up || !spawn)
+		return sq_throwerror(v, _SC("Invalid this pointer for a spawn"));
+	SQBool b = spawn->createCreep();
+	sq_pushbool(v, b);
+	return 1;
 }
 
 static void wrenPrint(WrenVM* vm)
