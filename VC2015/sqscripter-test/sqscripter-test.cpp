@@ -97,6 +97,8 @@ struct Creep : public RoomObject{
 	static int id_gen;
 
 	Creep(int x, int y, int owner) : RoomObject(x, y), owner(owner), id(id_gen++){}
+	bool move(int direction);
+
 	static SQInteger sqf_get(HSQUIRRELVM v);
 	static SQInteger sqf_move(HSQUIRRELVM v);
 
@@ -147,6 +149,7 @@ SQObject Spawn::spawnClass;
 const int ROOMSIZE = 50;
 
 static int bind_wren(int argc, char *argv[]);
+bool isBlocked(const RoomPosition &pos);
 
 static Tile room[ROOMSIZE][ROOMSIZE] = {0};
 static std::list<Creep> creeps;
@@ -398,11 +401,17 @@ SQInteger Creep::sqf_get(HSQUIRRELVM v){
 SQInteger Creep::sqf_move(HSQUIRRELVM v){
 	wxMutexLocker ml(wxGetApp().mutex);
 	SQUserPointer p;
-	if(SQ_FAILED(sq_getinstanceup(v, 1, &p, nullptr)))
+	Creep *creep;
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &p, nullptr)) || !(creep = (Creep*)p))
 		return sq_throwerror(v, _SC("Broken Creep instance"));
 	SQInteger i;
 	if(SQ_FAILED(sq_getinteger(v, 2, &i)) || i < TOP || TOP_LEFT < i)
 		return sq_throwerror(v, _SC("Invalid Creep.move argument"));
+	sq_pushbool(v, creep->move(i));
+	return 1;
+}
+
+bool Creep::move(int direction){
 	static int deltas[8][2] = {
 		{0,-1}, // TOP = 1,
 		{1,-1}, // TOP_RIGHT = 2,
@@ -413,10 +422,13 @@ SQInteger Creep::sqf_move(HSQUIRRELVM v){
 		{-1,0}, // LEFT = 7,
 		{-1,-1}, // TOP_LEFT = 8,
 	};
-	Creep *creep = static_cast<Creep*>(p);
-	creep->pos.x += deltas[i-1][0];
-	creep->pos.y += deltas[i-1][1];
-	return 0;
+	RoomPosition newPos = pos;
+	newPos.x += deltas[direction-1][0];
+	newPos.y += deltas[direction-1][1];
+	if(isBlocked(newPos))
+		return false;
+	pos = newPos;
+	return true;
 }
 
 WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * signature)
@@ -466,18 +478,9 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 				return;
 			}
 			int i = (int)wrenGetSlotDouble(vm, 1);
-			static int deltas[8][2] = {
-				{ 0,-1 }, // TOP = 1,
-				{ 1,-1 }, // TOP_RIGHT = 2,
-				{ 1,0 }, // RIGHT = 3,
-				{ 1,1 }, // BOTTOM_RIGHT = 4,
-				{ 0,1 }, // BOTTOM = 5,
-				{ -1,1 }, // BOTTOM_LEFT = 6,
-				{ -1,0 }, // LEFT = 7,
-				{ -1,-1 }, // TOP_LEFT = 8,
-			};
-			creep->pos.x += deltas[i - 1][0];
-			creep->pos.y += deltas[i - 1][1];
+			bool ret = creep->move(i);
+			wrenEnsureSlots(vm, 1);
+			wrenSetSlotBool(vm, 0, ret);
 		};
 	}
 	return nullptr;
