@@ -93,11 +93,14 @@ enum Direction{
 struct Creep : public RoomObject{
 	Path path;
 	int owner;
-	int id;
+	int id = id_gen++;
+	int ttl = max_ttl; // Time to Live
 	static int id_gen;
+	static const int max_ttl = 100;
 
-	Creep(int x, int y, int owner) : RoomObject(x, y), owner(owner), id(id_gen++){}
+	Creep(int x, int y, int owner) : RoomObject(x, y), owner(owner){}
 	bool move(int direction);
+	void update();
 
 	static SQInteger sqf_get(HSQUIRRELVM v);
 	static SQInteger sqf_move(HSQUIRRELVM v);
@@ -109,14 +112,19 @@ struct Spawn : public RoomObject{
 	typedef Spawn tt;
 
 	int owner;
-	int id;
+	int id = id_gen++;
+	int resource = 0;
 	static int id_gen;
+	static const int max_resource = 100;
+	static const int creep_cost = 20;
 
 	static const SQUserPointer typetag;
 
-	Spawn(int x, int y, int owner) : RoomObject(x, y), owner(owner), id(id_gen++){}
+	Spawn(int x, int y, int owner) : RoomObject(x, y), owner(owner){}
 
 	bool createCreep();
+
+	void update();
 
 	static SQInteger sqf_createCreep(HSQUIRRELVM v);
 
@@ -132,7 +140,7 @@ struct Spawn : public RoomObject{
 		sq_newclosure(v, &sqf_createCreep, 0);
 		sq_newslot(v, -3, SQFalse);
 		sq_pushstring(v, _SC("_get"), -1);
-		sq_newclosure(v, &Creep::sqf_get, 0);
+		sq_newclosure(v, &sqf_get, 0);
 		sq_newslot(v, -3, SQFalse);
 		sq_getstackobj(v, -1, &spawnClass);
 		sq_addref(v, &spawnClass);
@@ -394,6 +402,11 @@ SQInteger Creep::sqf_get(HSQUIRRELVM v){
 		sq_pushinteger(v, creep->owner);
 		return 1;
 	}
+	else if(!scstrcmp(key, _SC("ttl"))){
+		sq_pushroottable(v);
+		sq_pushinteger(v, creep->ttl);
+		return 1;
+	}
 	else
 		return sq_throwerror(v, _SC("Couldn't find key"));
 }
@@ -431,6 +444,13 @@ bool Creep::move(int direction){
 	return true;
 }
 
+void Creep::update()
+{
+	if(ttl == 0)
+		return;
+	ttl--;
+}
+
 WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * signature)
 {
 	if(!isStatic && !strcmp(signature, "pos")){
@@ -465,6 +485,16 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 			Creep *creep = *pp;
 			wrenEnsureSlots(vm, 1);
 			wrenSetSlotDouble(vm, 0, creep->owner);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "ttl")){
+		return [](WrenVM* vm){
+			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			Creep *creep = *pp;
+			wrenEnsureSlots(vm, 1);
+			wrenSetSlotDouble(vm, 0, creep->ttl);
 		};
 	}
 	else if(!isStatic && !strcmp(signature, "move(_)")){
@@ -506,6 +536,16 @@ SQInteger Spawn::sqf_get(HSQUIRRELVM v){
 		*rp = spawn->pos;
 		return 1;
 	}
+	else if(!scstrcmp(key, _SC("id"))){
+		sq_pushroottable(v);
+		sq_pushinteger(v, spawn->id);
+		return 1;
+	}
+	else if(!scstrcmp(key, _SC("resource"))){
+		sq_pushroottable(v);
+		sq_pushinteger(v, spawn->resource);
+		return 1;
+	}
 	else
 		return sq_throwerror(v, _SC("Couldn't find key"));
 }
@@ -544,6 +584,16 @@ WrenForeignMethodFn Spawn::wren_bind(WrenVM * vm, bool isStatic, const char * si
 			tt *creep = *pp;
 			wrenEnsureSlots(vm, 1);
 			wrenSetSlotDouble(vm, 0, creep->owner);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "resource")){
+		return [](WrenVM* vm){
+			tt** pp = (tt**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			tt *creep = *pp;
+			wrenEnsureSlots(vm, 1);
+			wrenSetSlotDouble(vm, 0, creep->resource);
 		};
 	}
 	else if(!isStatic && !strcmp(signature, "createCreep()")){
@@ -602,6 +652,7 @@ void MyApp::timer(wxTimerEvent&){
 	}
 
 	for(auto& it : creeps){
+		it.update();
 /*		if(it.path.size() == 0){
 			Spawn *spawn = [](int owner){
 				for(auto& it : spawns)
@@ -626,6 +677,18 @@ void MyApp::timer(wxTimerEvent&){
 			it.pos = newPos;
 		}*/
 	}
+
+	// Delete pass
+	for(auto it = creeps.begin(); it != creeps.end();){
+		auto next = it;
+		++next;
+		if(it->ttl <= 0)
+			creeps.erase(it);
+		it = next;
+	}
+
+	for(auto& it : spawns)
+		it.update();
 
 	// Separating definition of MyApp::timer and MainFrame::update enables us to run the simulation
 	// without windows or graphics, hopefully in the future.
@@ -724,28 +787,40 @@ void wxGLCanvasSubClass::Render()
 		}
 	}
 
-	for(auto it : spawns){
+	for(auto& it : spawns){
 		glColor3f(0.8, 0.8, 0.75);
 		glBegin(GL_POLYGON);
+		double radius = 0.8;
 		for(int j = 0; j < 32; j++){
 			double angle = j * 2. * M_PI / 32;
-			glVertex2d(.7 * cos(angle) + it.pos.x, .7 * sin(angle) + it.pos.y);
+			glVertex2d(radius * cos(angle) + it.pos.x, radius * sin(angle) + it.pos.y);
 		}
 		glEnd();
 
 		glColor3f(0, 0, 0);
 		glBegin(GL_POLYGON);
+		radius = 0.7;
 		for(int j = 0; j < 32; j++){
 			double angle = j * 2. * M_PI / 32;
-			glVertex2d(.6 * cos(angle) + it.pos.x, .6 * sin(angle) + it.pos.y);
+			glVertex2d(radius * cos(angle) + it.pos.x, radius * sin(angle) + it.pos.y);
 		}
 		glEnd();
 
 		glColor4fv(creepColors[!!it.owner]);
 		glBegin(GL_POLYGON);
+		radius = .5;
 		for(int j = 0; j < 32; j++){
 			double angle = j * 2. * M_PI / 32;
-			glVertex2d(.3 * cos(angle) + it.pos.x, .3 * sin(angle) + it.pos.y);
+			glVertex2d(radius * cos(angle) + it.pos.x, radius * sin(angle) + it.pos.y);
+		}
+		glEnd();
+
+		glColor3f(1, 1, 0);
+		glBegin(GL_POLYGON);
+		radius = 0.4 * ::sqrt((double)it.resource / it.max_resource); // Convert it to be proportional to area
+		for(int j = 0; j < 32; j++){
+			double angle = j * 2. * M_PI / 32;
+			glVertex2d(radius * cos(angle) + it.pos.x, radius * sin(angle) + it.pos.y);
 		}
 		glEnd();
 	}
@@ -1103,6 +1178,8 @@ int nonmain(int argc, char *argv[])
 }
 
 bool Spawn::createCreep(){
+	if(resource < creep_cost)
+		return false;
 	static const int directions[4][2] = {
 		{0,-1},
 		{ 1,0 },
@@ -1115,9 +1192,16 @@ bool Spawn::createCreep(){
 		if(isBlocked(newPos))
 			continue;
 		creeps.push_back(Creep(newPos.x, newPos.y, owner));
+		resource -= creep_cost;
 		return true;
 	}while(++i < numof(directions));
 	return false;
+}
+
+void Spawn::update()
+{
+	if(global_time % 10 == 0 && resource < max_resource)
+		resource++;
 }
 
 SQInteger Spawn::sqf_createCreep(HSQUIRRELVM v)
@@ -1290,12 +1374,14 @@ int bind_wren(int argc, char *argv[])
 	"	foreign move(i)\n"
 	"	foreign id\n"
 	"	foreign owner\n"
+	"	foreign ttl\n"
 	"}\n"
 	"foreign class Spawn{\n"
 	"	foreign pos\n"
 	"	foreign createCreep()\n"
 	"	foreign id\n"
 	"	foreign owner\n"
+	"	foreign resource\n"
 	"}\n");
 
 	whmain = wrenMakeCallHandle(wren, "main");
