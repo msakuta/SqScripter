@@ -95,15 +95,40 @@ struct Creep : public RoomObject{
 	int owner;
 	int id = id_gen++;
 	int ttl = max_ttl; // Time to Live
+	int resource = 0; // Resource cargo
 	static int id_gen;
-	static const int max_ttl = 100;
+	static const int max_ttl = 1000;
+	static const int max_resource = 100;
 
 	Creep(int x, int y, int owner) : RoomObject(x, y), owner(owner){}
 	bool move(int direction);
+	bool harvest(int direction);
+	bool store(int direction);
 	void update();
+
+	static void sq_define(HSQUIRRELVM sqvm){
+		sq_pushstring(sqvm, _SC("Creep"), -1);
+		sq_newclass(sqvm, SQFalse);
+		sq_settypetag(sqvm, -1, _SC("Creep"));
+		sq_pushstring(sqvm, _SC("move"), -1);
+		sq_newclosure(sqvm, &Creep::sqf_move, 0);
+		sq_newslot(sqvm, -3, SQFalse);
+		sq_pushstring(sqvm, _SC("harvest"), -1);
+		sq_newclosure(sqvm, &Creep::sqf_harvest, 0);
+		sq_newslot(sqvm, -3, SQFalse);
+		sq_pushstring(sqvm, _SC("store"), -1);
+		sq_newclosure(sqvm, &Creep::sqf_store, 0);
+		sq_newslot(sqvm, -3, SQFalse);
+		sq_pushstring(sqvm, _SC("_get"), -1);
+		sq_newclosure(sqvm, &Creep::sqf_get, 0);
+		sq_newslot(sqvm, -3, SQFalse);
+		sq_newslot(sqvm, -3, SQFalse);
+	}
 
 	static SQInteger sqf_get(HSQUIRRELVM v);
 	static SQInteger sqf_move(HSQUIRRELVM v);
+	static SQInteger sqf_harvest(HSQUIRRELVM v);
+	static SQInteger sqf_store(HSQUIRRELVM v);
 
 	static WrenForeignMethodFn wren_bind(WrenVM* vm, bool isStatic, const char* signature);
 };
@@ -115,7 +140,8 @@ struct Spawn : public RoomObject{
 	int id = id_gen++;
 	int resource = 0;
 	static int id_gen;
-	static const int max_resource = 100;
+	static const int max_resource = 1000;
+	static const int max_gen_resource = 100;
 	static const int creep_cost = 20;
 
 	static const SQUserPointer typetag;
@@ -154,6 +180,43 @@ int Spawn::id_gen = 0;
 const SQUserPointer Spawn::typetag = _SC("Spawn");
 SQObject Spawn::spawnClass;
 
+struct Mine : public RoomObject{
+	typedef Mine tt;
+
+	int id = id_gen++;
+	int resource = 0;
+	static int id_gen;
+	static const int max_resource = 500;
+
+	static const SQUserPointer typetag;
+
+	Mine(int x, int y) : RoomObject(x, y){}
+
+	static SQInteger sqf_get(HSQUIRRELVM v);
+
+	static HSQOBJECT mineClass;
+
+	void update();
+
+	static void sq_define(HSQUIRRELVM v){
+		sq_pushstring(v, _SC("Mine"), -1);
+		sq_newclass(v, SQFalse);
+		sq_settypetag(v, -1, typetag);
+		sq_pushstring(v, _SC("_get"), -1);
+		sq_newclosure(v, &sqf_get, 0);
+		sq_newslot(v, -3, SQFalse);
+		sq_getstackobj(v, -1, &mineClass);
+		sq_addref(v, &mineClass);
+		sq_newslot(v, -3, SQFalse);
+	}
+
+	static WrenForeignMethodFn wren_bind(WrenVM* vm, bool isStatic, const char* signature);
+};
+
+int Mine::id_gen = 0;
+const SQUserPointer Mine::typetag = _SC("Mine");
+SQObject Mine::mineClass;
+
 const int ROOMSIZE = 50;
 
 static int bind_wren(int argc, char *argv[]);
@@ -162,6 +225,7 @@ bool isBlocked(const RoomPosition &pos);
 static Tile room[ROOMSIZE][ROOMSIZE] = {0};
 static std::list<Creep> creeps;
 static std::list<Spawn> spawns;
+static std::list<Mine> mines;
 static Creep *selected;
 static int global_time = 0;
 /// The Squirrel virtual machine
@@ -407,6 +471,11 @@ SQInteger Creep::sqf_get(HSQUIRRELVM v){
 		sq_pushinteger(v, creep->ttl);
 		return 1;
 	}
+	else if(!scstrcmp(key, _SC("resource"))){
+		sq_pushroottable(v);
+		sq_pushinteger(v, creep->resource);
+		return 1;
+	}
 	else
 		return sq_throwerror(v, _SC("Couldn't find key"));
 }
@@ -421,6 +490,34 @@ SQInteger Creep::sqf_move(HSQUIRRELVM v){
 	if(SQ_FAILED(sq_getinteger(v, 2, &i)) || i < TOP || TOP_LEFT < i)
 		return sq_throwerror(v, _SC("Invalid Creep.move argument"));
 	sq_pushbool(v, creep->move(i));
+	return 1;
+}
+
+SQInteger Creep::sqf_harvest(HSQUIRRELVM v)
+{
+	wxMutexLocker ml(wxGetApp().mutex);
+	SQUserPointer p;
+	Creep *creep;
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &p, nullptr)) || !(creep = (Creep*)p))
+		return sq_throwerror(v, _SC("Broken Creep instance"));
+	SQInteger i;
+	if(SQ_FAILED(sq_getinteger(v, 2, &i)) || i < TOP || TOP_LEFT < i)
+		return sq_throwerror(v, _SC("Invalid Creep.move argument"));
+	sq_pushbool(v, creep->harvest(i));
+	return 1;
+}
+
+SQInteger Creep::sqf_store(HSQUIRRELVM v)
+{
+	wxMutexLocker ml(wxGetApp().mutex);
+	SQUserPointer p;
+	Creep *creep;
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &p, nullptr)) || !(creep = (Creep*)p))
+		return sq_throwerror(v, _SC("Broken Creep instance"));
+	SQInteger i;
+	if(SQ_FAILED(sq_getinteger(v, 2, &i)) || i < TOP || TOP_LEFT < i)
+		return sq_throwerror(v, _SC("Invalid Creep.move argument"));
+	sq_pushbool(v, creep->store(i));
 	return 1;
 }
 
@@ -442,6 +539,42 @@ bool Creep::move(int direction){
 		return false;
 	pos = newPos;
 	return true;
+}
+
+bool Creep::harvest(int direction)
+{
+	for(auto& mine : mines){
+		int dist = std::max(mine.pos.x - pos.x, mine.pos.y - pos.y);
+		if(dist <= 1 && 0 < mine.resource){
+			int harvest_amount = 10;
+			if(mine.resource < harvest_amount)
+				harvest_amount = mine.resource;
+			if(max_resource - resource < harvest_amount)
+				harvest_amount = max_resource - resource;
+			resource += harvest_amount;
+			mine.resource -= harvest_amount;
+			return true;
+		}
+	}
+	return false;
+}
+
+bool Creep::store(int direction)
+{
+	for(auto& spawn : spawns){
+		int dist = std::max(spawn.pos.x - pos.x, spawn.pos.y - pos.y);
+		if(dist <= 1 && 0 < resource){
+			int store_amount = resource;
+			if(spawn.resource < store_amount)
+				store_amount = spawn.resource;
+			if(spawn.max_resource - spawn.resource < store_amount)
+				store_amount = spawn.max_resource - spawn.resource;
+			resource -= store_amount;
+			spawn.resource += store_amount;
+			return true;
+		}
+	}
+	return false;
 }
 
 void Creep::update()
@@ -497,6 +630,16 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 			wrenSetSlotDouble(vm, 0, creep->ttl);
 		};
 	}
+	else if(!isStatic && !strcmp(signature, "resource")){
+		return [](WrenVM* vm){
+			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			Creep *creep = *pp;
+			wrenEnsureSlots(vm, 1);
+			wrenSetSlotDouble(vm, 0, creep->resource);
+		};
+	}
 	else if(!isStatic && !strcmp(signature, "move(_)")){
 		return [](WrenVM* vm){
 			wxMutexLocker ml(wxGetApp().mutex);
@@ -509,6 +652,38 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 			}
 			int i = (int)wrenGetSlotDouble(vm, 1);
 			bool ret = creep->move(i);
+			wrenEnsureSlots(vm, 1);
+			wrenSetSlotBool(vm, 0, ret);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "harvest(_)")){
+		return [](WrenVM* vm){
+			wxMutexLocker ml(wxGetApp().mutex);
+			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			Creep *creep = *pp;
+			if(WREN_TYPE_NUM != wrenGetSlotType(vm, 1)){
+				return;
+			}
+			int i = (int)wrenGetSlotDouble(vm, 1);
+			bool ret = creep->harvest(i);
+			wrenEnsureSlots(vm, 1);
+			wrenSetSlotBool(vm, 0, ret);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "store(_)")){
+		return [](WrenVM* vm){
+			wxMutexLocker ml(wxGetApp().mutex);
+			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			Creep *creep = *pp;
+			if(WREN_TYPE_NUM != wrenGetSlotType(vm, 1)){
+				return;
+			}
+			int i = (int)wrenGetSlotDouble(vm, 1);
+			bool ret = creep->store(i);
 			wrenEnsureSlots(vm, 1);
 			wrenSetSlotBool(vm, 0, ret);
 		};
@@ -690,6 +865,9 @@ void MyApp::timer(wxTimerEvent&){
 	for(auto& it : spawns)
 		it.update();
 
+	for(auto& it : mines)
+		it.update();
+
 	// Separating definition of MyApp::timer and MainFrame::update enables us to run the simulation
 	// without windows or graphics, hopefully in the future.
 	if(mainFrame)
@@ -775,6 +953,15 @@ void wxGLCanvasSubClass::Render()
 		}
 		glEnd();
 
+		glColor3f(1, 1, 0);
+		glBegin(GL_POLYGON);
+		double radius = 0.2 * ::sqrt((double)it.resource / it.max_resource); // Convert it to be proportional to area
+		for(int j = 0; j < 32; j++){
+			double angle = j * 2. * M_PI / 32;
+			glVertex2d(radius * cos(angle) + it.pos.x, radius * sin(angle) + it.pos.y);
+		}
+		glEnd();
+
 		if(selected == &it){
 			glColor4f(1,1,0,1);
 			glLineWidth(3);
@@ -820,6 +1007,28 @@ void wxGLCanvasSubClass::Render()
 		radius = 0.4 * ::sqrt((double)it.resource / it.max_resource); // Convert it to be proportional to area
 		for(int j = 0; j < 32; j++){
 			double angle = j * 2. * M_PI / 32;
+			glVertex2d(radius * cos(angle) + it.pos.x, radius * sin(angle) + it.pos.y);
+		}
+		glEnd();
+	}
+
+	for(auto& it : mines){
+		glColor3f(0.8, 0.8, 0.75);
+		glBegin(GL_POLYGON);
+		double radius = 0.7;
+		glColor3f(0, 0, 0);
+		glBegin(GL_POLYGON);
+		for(int j = 0; j < 4; j++){
+			double angle = j * 2. * M_PI / 4;
+			glVertex2d(radius * cos(angle) + it.pos.x, radius * sin(angle) + it.pos.y);
+		}
+		glEnd();
+
+		glColor3f(1, 1, 0);
+		glBegin(GL_POLYGON);
+		radius = 0.5 * ::sqrt((double)it.resource / it.max_resource); // Convert it to be proportional to area
+		for(int j = 0; j < 4; j++){
+			double angle = j * 2. * M_PI / 4;
 			glVertex2d(radius * cos(angle) + it.pos.x, radius * sin(angle) + it.pos.y);
 		}
 		glEnd();
@@ -878,6 +1087,15 @@ bool MyApp::OnInit()
 			y = rand() % ROOMSIZE;
 		}while(room[y][x].type != 0);
 		spawns.push_back(Spawn(x, y, i));
+	}
+
+	for(int i = 0; i < 2; i++){
+		int x, y;
+		do{
+			x = rand() % ROOMSIZE;
+			y = rand() % ROOMSIZE;
+		} while(room[y][x].type != 0);
+		mines.push_back(Mine(x, y));
 	}
 
 	const int rightPanelWidth = 300;
@@ -1082,6 +1300,21 @@ struct Game{
 			}
 			return 1;
 		}
+		else if(!scstrcmp(key, _SC("mines"))){
+			size_t sz = mines.size();
+			SQInteger i = 0;
+			sq_newarray(v, sz); // array
+			for(auto& it : mines){
+				sq_pushobject(v, Mine::mineClass); // array Mine
+				sq_pushinteger(v, i++); // array Mine i
+				sq_createinstance(v, -2); // array Mine i inst
+				sq_setinstanceup(v, -1, &it); // array Mine i inst
+				if(SQ_FAILED(sq_set(v, -4))) // array Mine
+					return sq_throwerror(v, _SC("Failed to create creeps array"));
+				sq_pop(v, 1); // array
+			}
+			return 1;
+		}
 		else
 			return sq_throwerror(v, _SC("Index not found"));
 	}
@@ -1131,18 +1364,11 @@ int nonmain(int argc, char *argv[])
 	sq_remove(sqvm, -2);
 	sq_newslot(sqvm, -3, SQFalse);
 
-	sq_pushstring(sqvm, _SC("Creep"), -1);
-	sq_newclass(sqvm, SQFalse);
-	sq_settypetag(sqvm, -1, _SC("Creep"));
-	sq_pushstring(sqvm, _SC("move"), -1);
-	sq_newclosure(sqvm, &Creep::sqf_move, 0);
-	sq_newslot(sqvm, -3, SQFalse);
-	sq_pushstring(sqvm, _SC("_get"), -1);
-	sq_newclosure(sqvm, &Creep::sqf_get, 0);
-	sq_newslot(sqvm, -3, SQFalse);
-	sq_newslot(sqvm, -3, SQFalse);
+	Creep::sq_define(sqvm);
 
 	Spawn::sq_define(sqvm);
+
+	Mine::sq_define(sqvm);
 
 	sq_pushstring(sqvm, _SC("RoomPosition"), -1);
 	sq_newclass(sqvm, SQFalse);
@@ -1200,7 +1426,7 @@ bool Spawn::createCreep(){
 
 void Spawn::update()
 {
-	if(global_time % 10 == 0 && resource < max_resource)
+	if(global_time % 10 == 0 && resource < max_gen_resource)
 		resource++;
 }
 
@@ -1309,6 +1535,19 @@ static WrenForeignMethodFn bindForeignMethod(
 					}
 				};
 			}
+			else if(isStatic && strcmp(signature, "mines") == 0){
+				return [](WrenVM* vm){
+					// Slots: [array] main.Creep [instance]
+					wrenEnsureSlots(vm, 3);
+					wrenSetSlotNewList(vm, 0);
+					wrenGetVariable(vm, "main", "Spawn", 1);
+					for(auto it = mines.begin(); it != mines.end(); ++it){
+						void *pp = wrenSetSlotNewForeign(vm, 2, 1, sizeof(Mine*));
+						*(Mine**)pp = &*it;
+						wrenInsertInList(vm, 0, -1, 2);
+					}
+				};
+			}
 		}
 		else if(strcmp(className, "Creep") == 0)
 		{
@@ -1317,6 +1556,10 @@ static WrenForeignMethodFn bindForeignMethod(
 		else if(strcmp(className, "Spawn") == 0)
 		{
 			return Spawn::wren_bind(vm, isStatic, signature);
+		}
+		else if(strcmp(className, "Mine") == 0)
+		{
+			return Mine::wren_bind(vm, isStatic, signature);
 		}
 	}
 	// Other modules...
@@ -1363,6 +1606,7 @@ int bind_wren(int argc, char *argv[])
 	"	foreign static creep(i)\n"
 	"	foreign static creeps\n"
 	"	foreign static spawns\n"
+	"	foreign static mines\n"
 	"	static main { __main }\n"
 	"	static main=(value) { __main = value }\n"
 	"	static callMain() {\n"
@@ -1372,15 +1616,23 @@ int bind_wren(int argc, char *argv[])
 	"foreign class Creep{\n"
 	"	foreign pos\n"
 	"	foreign move(i)\n"
+	"	foreign harvest(i)\n"
+	"	foreign store(i)\n"
 	"	foreign id\n"
 	"	foreign owner\n"
 	"	foreign ttl\n"
+	"	foreign resource\n"
 	"}\n"
 	"foreign class Spawn{\n"
 	"	foreign pos\n"
 	"	foreign createCreep()\n"
 	"	foreign id\n"
 	"	foreign owner\n"
+	"	foreign resource\n"
+	"}\n"
+	"foreign class Mine{\n"
+	"	foreign pos\n"
+	"	foreign id\n"
 	"	foreign resource\n"
 	"}\n");
 
@@ -1389,4 +1641,84 @@ int bind_wren(int argc, char *argv[])
 	whcallMain = wrenMakeCallHandle(wren, "callMain()");
 
 	return 0;
+}
+
+SQInteger Mine::sqf_get(HSQUIRRELVM v)
+{
+	wxMutexLocker ml(wxGetApp().mutex);
+	SQUserPointer up;
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, nullptr)))
+		return sq_throwerror(v, _SC("Invalid this pointer for Spawn"));
+	Mine *mine = static_cast<Mine*>(up);
+	const SQChar *key;
+	if(SQ_FAILED(sq_getstring(v, 2, &key)))
+		return sq_throwerror(v, _SC("Broken key in _get"));
+	if(!scstrcmp(key, _SC("pos"))){
+		sq_pushroottable(v);
+		sq_pushstring(v, _SC("RoomPosition"), -1);
+		if(SQ_FAILED(sq_get(v, -2)))
+			return sq_throwerror(v, _SC("Can't find RoomPosition class definition"));
+		sq_createinstance(v, -1);
+		sq_getinstanceup(v, -1, &up, nullptr);
+		RoomPosition *rp = static_cast<RoomPosition*>(up);
+		*rp = mine->pos;
+		return 1;
+	}
+	else if(!scstrcmp(key, _SC("id"))){
+		sq_pushroottable(v);
+		sq_pushinteger(v, mine->id);
+		return 1;
+	}
+	else if(!scstrcmp(key, _SC("resource"))){
+		sq_pushroottable(v);
+		sq_pushinteger(v, mine->resource);
+		return 1;
+	}
+	else
+		return sq_throwerror(v, _SC("Couldn't find key"));
+	return SQInteger();
+}
+
+void Mine::update(){
+	if(resource < max_resource && global_time % 2 == 0)
+		resource++;
+}
+
+WrenForeignMethodFn Mine::wren_bind(WrenVM * vm, bool isStatic, const char * signature)
+{
+	if(!isStatic && !strcmp(signature, "pos")){
+		return [](WrenVM* vm){
+			tt** pp = (tt**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			tt *mine = *pp;
+			wrenEnsureSlots(vm, 2);
+			wrenSetSlotNewList(vm, 0);
+			wrenSetSlotDouble(vm, 1, mine->pos.x);
+			wrenInsertInList(vm, 0, -1, 1);
+			wrenSetSlotDouble(vm, 1, mine->pos.y);
+			wrenInsertInList(vm, 0, -1, 1);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "id")){
+		return [](WrenVM* vm){
+			tt** pp = (tt**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			tt *mine = *pp;
+			wrenEnsureSlots(vm, 1);
+			wrenSetSlotDouble(vm, 0, mine->id);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "resource")){
+		return [](WrenVM* vm){
+			tt** pp = (tt**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			tt *creep = *pp;
+			wrenEnsureSlots(vm, 1);
+			wrenSetSlotDouble(vm, 0, creep->resource);
+		};
+	}
+	return WrenForeignMethodFn();
 }
