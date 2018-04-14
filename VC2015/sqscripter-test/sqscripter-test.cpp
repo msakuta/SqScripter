@@ -47,7 +47,7 @@ extern "C"{
 
 struct Tile{
 	uint16_t type;
-	uint16_t creep;
+	uint16_t object; ///< Object id if there is one on this tile or 0.
 	int cost; ///< Used for A* pathfinding algorithm
 };
 
@@ -55,12 +55,16 @@ struct RoomPosition{
 	int x;
 	int y;
 
+	static const SQUserPointer typetag;
+
 	RoomPosition(int x, int y) : x(x), y(y){}
 	bool operator==(const RoomPosition& o)const{return x == o.x && y == o.y;}
 	bool operator!=(const RoomPosition& o)const{return !(*this == o);}
 
 	static SQInteger sqf_get(HSQUIRRELVM v);
 };
+
+const SQUserPointer RoomPosition::typetag = (SQUserPointer)_SC("RoomPosition");
 
 struct PathNode{
 	RoomPosition pos;
@@ -76,9 +80,16 @@ typedef std::vector<PathNode> Path;
 
 struct RoomObject{
 	RoomPosition pos;
+	int id = id_gen++;
+	static int id_gen;
 
-	RoomObject(int x, int y) : pos(x, y){}
+	RoomObject(int x, int y);
+	virtual ~RoomObject();
+
+	virtual const char *className()const{return "RoomObject";}
 };
+
+int RoomObject::id_gen = 1;
 
 enum Direction{
 	TOP = 1,
@@ -94,14 +105,15 @@ enum Direction{
 struct Creep : public RoomObject{
 	Path path;
 	int owner;
-	int id = id_gen++;
 	int ttl = max_ttl; // Time to Live
 	int resource = 0; // Resource cargo
-	static int id_gen;
 	static const int max_ttl = 1000;
 	static const int max_resource = 100;
 
+	static const SQUserPointer typetag;
+
 	Creep(int x, int y, int owner);
+	const char *className()const override{ return "Creep"; }
 	bool move(int direction);
 	bool move(int dx, int dy);
 	bool harvest(int direction);
@@ -119,13 +131,14 @@ struct Creep : public RoomObject{
 	static WrenForeignMethodFn wren_bind(WrenVM* vm, bool isStatic, const char* signature);
 };
 
+const SQUserPointer Creep::typetag = _SC("Creep");
+
+
 struct Spawn : public RoomObject{
 	typedef Spawn tt;
 
 	int owner;
-	int id = id_gen++;
 	int resource = 0;
-	static int id_gen;
 	static const int max_resource = 1000;
 	static const int max_gen_resource = 100;
 	static const int creep_cost = 20;
@@ -133,6 +146,7 @@ struct Spawn : public RoomObject{
 	static const SQUserPointer typetag;
 
 	Spawn(int x, int y, int owner) : RoomObject(x, y), owner(owner){}
+	const char *className()const override{ return "Spawn"; }
 
 	bool createCreep();
 
@@ -162,21 +176,19 @@ struct Spawn : public RoomObject{
 	static WrenForeignMethodFn wren_bind(WrenVM* vm, bool isStatic, const char* signature);
 };
 
-int Spawn::id_gen = 0;
 const SQUserPointer Spawn::typetag = _SC("Spawn");
 SQObject Spawn::spawnClass;
 
 struct Mine : public RoomObject{
 	typedef Mine tt;
 
-	int id = id_gen++;
 	int resource = max_resource;
-	static int id_gen;
 	static const int max_resource = 500;
 
 	static const SQUserPointer typetag;
 
 	Mine(int x, int y) : RoomObject(x, y){}
+	const char *className()const override{ return "Mine"; }
 
 	static SQInteger sqf_get(HSQUIRRELVM v);
 
@@ -199,7 +211,6 @@ struct Mine : public RoomObject{
 	static WrenForeignMethodFn wren_bind(WrenVM* vm, bool isStatic, const char* signature);
 };
 
-int Mine::id_gen = 0;
 const SQUserPointer Mine::typetag = _SC("Mine");
 SQObject Mine::mineClass;
 
@@ -212,7 +223,7 @@ static Tile room[ROOMSIZE][ROOMSIZE] = {0};
 static std::list<Creep> creeps;
 static std::list<Spawn> spawns;
 static std::list<Mine> mines;
-static Creep *selected;
+static RoomObject *selected = nullptr;
 static int global_time = 0;
 /// The Squirrel virtual machine
 static HSQUIRRELVM sqvm;
@@ -221,8 +232,17 @@ WrenHandle* whmain;
 WrenHandle* whcall;
 WrenHandle* whcallMain;
 
+RoomObject::RoomObject(int x, int y) : pos(x, y){
+}
+
+RoomObject::~RoomObject(){
+	// Clear the referencer
+	if(this == selected)
+		selected = nullptr;
+}
+
 std::vector<PathNode> findPath(const RoomPosition& from, const RoomPosition& to, const RoomObject& self){
-	auto internal = [to, self](){
+	auto internal = [&to, &self](){
 		int changes = 0;
 		for(int y = 0; y < ROOMSIZE; y++){
 			for(int x = 0; x < ROOMSIZE; x++){
@@ -233,15 +253,19 @@ std::vector<PathNode> findPath(const RoomPosition& from, const RoomPosition& to,
 					for(int x1 = std::max(x - 1, 0); x1 <= std::min(x + 1, ROOMSIZE-1); x1++){
 						Tile &tile1 = room[y1][x1];
 
+						// Ignore collision with destination (assume we're ok with tile next to it)
+						if(to.x == x1 && to.y == y1){
+							tile1.cost = tile.cost + 1;
+							return 0;
+						}
+
 						// Check if the path is blocked by another creep.
-						if(tile1.creep != 0)
+						if(tile1.object != 0 && tile1.object != self.id)
 							continue;
 
 						if(tile1.type == 0 && tile.cost + 1 < tile1.cost){
 							tile1.cost = tile.cost + 1;
 							changes++;
-							if(to.x == x1 && to.y == y1)
-								return 0;
 						}
 					}
 				}
@@ -340,6 +364,7 @@ protected:
 enum{
 	ID_SELECT_NAME = 1,
 	ID_SELECT_POS = 2,
+	ID_SELECT_RESOURCE = 3,
 	ID_TIME
 };
 
@@ -406,7 +431,7 @@ IMPLEMENT_APP(MyApp)
 SQInteger RoomPosition::sqf_get(HSQUIRRELVM v)
 {
 	SQUserPointer up;
-	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, nullptr)))
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, typetag)))
 		return sq_throwerror(v, _SC("Invalid this pointer"));
 	RoomPosition *pos = static_cast<RoomPosition*>(up);
 	const SQChar *key;
@@ -424,16 +449,12 @@ SQInteger RoomPosition::sqf_get(HSQUIRRELVM v)
 		return sq_throwerror(v, _SC("Couldn't find key"));
 }
 
-int Creep::id_gen = 1;
-
-Creep::Creep(int x, int y, int owner) : RoomObject(x, y), owner(owner){
-	room[y][x].creep = id;
-}
+Creep::Creep(int x, int y, int owner) : RoomObject(x, y), owner(owner){}
 
 void Creep::sq_define(HSQUIRRELVM sqvm){
 	sq_pushstring(sqvm, _SC("Creep"), -1);
 	sq_newclass(sqvm, SQFalse);
-	sq_settypetag(sqvm, -1, _SC("Creep"));
+	sq_settypetag(sqvm, -1, typetag);
 	sq_pushstring(sqvm, _SC("move"), -1);
 	sq_newclosure(sqvm, &Creep::sqf_move, 0);
 	sq_newslot(sqvm, -3, SQFalse);
@@ -448,10 +469,10 @@ void Creep::sq_define(HSQUIRRELVM sqvm){
 		wxMutexLocker ml(wxGetApp().mutex);
 		SQUserPointer p;
 		Creep *creep;
-		if(SQ_FAILED(sq_getinstanceup(v, 1, &p, nullptr)) || !(creep = (Creep*)p))
+		if(SQ_FAILED(sq_getinstanceup(v, 1, &p, typetag)) || !(creep = (Creep*)p))
 			return sq_throwerror(v, _SC("Broken Creep instance"));
 		RoomPosition *pos;
-		if(SQ_FAILED(sq_getinstanceup(v, 2, &p, nullptr)) || !(pos = (RoomPosition*)p))
+		if(SQ_FAILED(sq_getinstanceup(v, 2, &p, RoomPosition::typetag)) || !(pos = (RoomPosition*)p))
 			return sq_throwerror(v, _SC("Couldn't interpret the second argument as RoomPosition"));
 		sq_pushbool(v, creep->findPath(*pos));
 		return SQInteger(1);
@@ -462,7 +483,7 @@ void Creep::sq_define(HSQUIRRELVM sqvm){
 		wxMutexLocker ml(wxGetApp().mutex);
 		SQUserPointer p;
 		Creep *creep;
-		if(SQ_FAILED(sq_getinstanceup(v, 1, &p, nullptr)) || !(creep = (Creep*)p))
+		if(SQ_FAILED(sq_getinstanceup(v, 1, &p, typetag)) || !(creep = (Creep*)p))
 			return sq_throwerror(v, _SC("Broken Creep instance"));
 		sq_pushbool(v, creep->followPath());
 		return SQInteger(1);
@@ -477,7 +498,7 @@ void Creep::sq_define(HSQUIRRELVM sqvm){
 SQInteger Creep::sqf_get(HSQUIRRELVM v){
 	wxMutexLocker ml(wxGetApp().mutex);
 	SQUserPointer up;
-	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, nullptr)))
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, typetag)))
 		return sq_throwerror(v, _SC("Invalid this pointer"));
 	Creep *creep = static_cast<Creep*>(up);
 	const SQChar *key;
@@ -489,7 +510,7 @@ SQInteger Creep::sqf_get(HSQUIRRELVM v){
 		if(SQ_FAILED(sq_get(v, -2)))
 			return sq_throwerror(v, _SC("Can't find RoomPosition class definition"));
 		sq_createinstance(v, -1);
-		sq_getinstanceup(v, -1, &up, nullptr);
+		sq_getinstanceup(v, -1, &up, RoomPosition::typetag);
 		RoomPosition *rp = static_cast<RoomPosition*>(up);
 		*rp = creep->pos;
 		return 1;
@@ -522,7 +543,7 @@ SQInteger Creep::sqf_move(HSQUIRRELVM v){
 	wxMutexLocker ml(wxGetApp().mutex);
 	SQUserPointer p;
 	Creep *creep;
-	if(SQ_FAILED(sq_getinstanceup(v, 1, &p, nullptr)) || !(creep = (Creep*)p))
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &p, typetag)) || !(creep = (Creep*)p))
 		return sq_throwerror(v, _SC("Broken Creep instance"));
 	SQInteger i;
 	if(SQ_FAILED(sq_getinteger(v, 2, &i)) || i < TOP || TOP_LEFT < i)
@@ -536,7 +557,7 @@ SQInteger Creep::sqf_harvest(HSQUIRRELVM v)
 	wxMutexLocker ml(wxGetApp().mutex);
 	SQUserPointer p;
 	Creep *creep;
-	if(SQ_FAILED(sq_getinstanceup(v, 1, &p, nullptr)) || !(creep = (Creep*)p))
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &p, typetag)) || !(creep = (Creep*)p))
 		return sq_throwerror(v, _SC("Broken Creep instance"));
 	SQInteger i;
 	if(SQ_FAILED(sq_getinteger(v, 2, &i)) || i < TOP || TOP_LEFT < i)
@@ -550,7 +571,7 @@ SQInteger Creep::sqf_store(HSQUIRRELVM v)
 	wxMutexLocker ml(wxGetApp().mutex);
 	SQUserPointer p;
 	Creep *creep;
-	if(SQ_FAILED(sq_getinstanceup(v, 1, &p, nullptr)) || !(creep = (Creep*)p))
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &p, typetag)) || !(creep = (Creep*)p))
 		return sq_throwerror(v, _SC("Broken Creep instance"));
 	SQInteger i;
 	if(SQ_FAILED(sq_getinteger(v, 2, &i)) || i < TOP || TOP_LEFT < i)
@@ -579,9 +600,9 @@ bool Creep::move(int dx, int dy){
 	newPos.y += dy;
 	if(isBlocked(newPos))
 		return false;
-	room[pos.y][pos.x].creep = 0;
+	room[pos.y][pos.x].object = 0;
 	pos = newPos;
-	room[pos.y][pos.x].creep = id;
+	room[pos.y][pos.x].object = id;
 	return true;
 }
 
@@ -788,7 +809,7 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 SQInteger Spawn::sqf_get(HSQUIRRELVM v){
 	wxMutexLocker ml(wxGetApp().mutex);
 	SQUserPointer up;
-	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, nullptr)))
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, typetag)))
 		return sq_throwerror(v, _SC("Invalid this pointer for Spawn"));
 	Spawn *spawn = static_cast<Spawn*>(up);
 	const SQChar *key;
@@ -800,7 +821,7 @@ SQInteger Spawn::sqf_get(HSQUIRRELVM v){
 		if(SQ_FAILED(sq_get(v, -2)))
 			return sq_throwerror(v, _SC("Can't find RoomPosition class definition"));
 		sq_createinstance(v, -1);
-		sq_getinstanceup(v, -1, &up, nullptr);
+		sq_getinstanceup(v, -1, &up, RoomPosition::typetag);
 		RoomPosition *rp = static_cast<RoomPosition*>(up);
 		*rp = spawn->pos;
 		return 1;
@@ -889,12 +910,12 @@ bool isBlocked(const RoomPosition &pos){
 	if(pos.x < 0 || ROOMSIZE <= pos.x || pos.y < 0 || ROOMSIZE <= pos.y)
 		return true;
 	Tile& tile = room[pos.y][pos.x];
-	if(tile.type || tile.creep)
+	if(tile.type || tile.object)
 		return true;
 /*	for(auto& it : creeps){
 		if(it.pos == pos)
 			return true;
-	}*/
+	}
 	for(auto& it : spawns){
 		if(it.pos == pos)
 			return true;
@@ -902,7 +923,7 @@ bool isBlocked(const RoomPosition &pos){
 	for(auto& it : mines){
 		if(it.pos == pos)
 			return true;
-	}
+	}*/
 	return false;
 }
 
@@ -958,8 +979,10 @@ void MyApp::timer(wxTimerEvent&){
 	for(auto it = creeps.begin(); it != creeps.end();){
 		auto next = it;
 		++next;
-		if(it->ttl <= 0)
+		if(it->ttl <= 0){
+			room[it->pos.y][it->pos.x].object = 0;
 			creeps.erase(it);
+		}
 		it = next;
 	}
 
@@ -973,8 +996,10 @@ void MyApp::timer(wxTimerEvent&){
 	for(auto it = mines.begin(); it != mines.end();){
 		auto next = it;
 		++next;
-		if(it->resource <= 0)
+		if(it->resource <= 0){
+			room[it->pos.y][it->pos.x].object = 0;
 			mines.erase(it);
+		}
 		it = next;
 	}
 
@@ -986,8 +1011,10 @@ void MyApp::timer(wxTimerEvent&){
 			x = rand() % ROOMSIZE;
 			y = rand() % ROOMSIZE;
 		} while(isBlocked(RoomPosition(x, y)) && tries++ < max_tries);
-		if(tries < max_tries)
+		if(tries < max_tries){
 			mines.push_back(Mine(x, y));
+			room[y][x].object = mines.back().id;
+		}
 	}
 
 	// Separating definition of MyApp::timer and MainFrame::update enables us to run the simulation
@@ -1012,7 +1039,7 @@ void MainFrame::update(){
 	if(selected){
 		stc = static_cast<wxStaticText*>(GetWindowChild(ID_SELECT_NAME));
 		if(stc){
-			wxString str = "Selected: " + wxString::Format("Creep %p", selected);
+			wxString str = "Selected: " + wxString::Format("%s %d", selected->className(), selected->id);
 			stc->SetLabelText(str);
 		}
 
@@ -1020,6 +1047,28 @@ void MainFrame::update(){
 		if(stc){
 			stc->SetLabelText(wxString::Format("Pos: %d, %d", selected->pos.x, selected->pos.y));
 		}
+
+		if(stc = static_cast<wxStaticText*>(GetWindowChild(ID_SELECT_RESOURCE))){
+			if(Creep* creep = dynamic_cast<Creep*>(selected)){
+				stc->SetLabelText(wxString::Format("Resource: %d, Time to Live: %d", creep->resource, creep->ttl));
+			}
+			else if(Spawn* spawn = dynamic_cast<Spawn*>(selected)){
+				stc->SetLabelText(wxString::Format("Resource: %d", spawn->resource));
+			}
+			else if(Mine* mine = dynamic_cast<Mine*>(selected)){
+				stc->SetLabelText(wxString::Format("Resource: %d", mine->resource));
+			}
+			else
+				stc->SetLabelText("");
+		}
+	}
+	else{
+		if(stc = static_cast<wxStaticText*>(GetWindowChild(ID_SELECT_NAME)))
+			stc->SetLabelText("No Selection");
+		if(stc = static_cast<wxStaticText*>(GetWindowChild(ID_SELECT_POS)))
+			stc->SetLabelText("");
+		if(stc = static_cast<wxStaticText*>(GetWindowChild(ID_SELECT_RESOURCE)))
+			stc->SetLabelText("");
 	}
 
 	Refresh();
@@ -1095,17 +1144,6 @@ void wxGLCanvasSubClass::Render()
 			pathy -= node.dy;
 		}
 		glEnd();
-
-		if(selected == &it){
-			glColor4f(1,1,0,1);
-			glLineWidth(3);
-			glBegin(GL_LINE_LOOP);
-			for(int j = 0; j < 32; j++){
-				double angle = j * 2. * M_PI / 32;
-				glVertex2d(0.7 * cos(angle) + it.pos.x, .7 * sin(angle) + it.pos.y);
-			}
-			glEnd();
-		}
 	}
 
 	for(auto& it : spawns){
@@ -1167,6 +1205,33 @@ void wxGLCanvasSubClass::Render()
 		}
 		glEnd();
 	}
+
+	if(selected){
+		glColor4f(1, 1, 0, 1);
+		glLineWidth(3);
+		glBegin(GL_LINE_LOOP);
+		for(int j = 0; j < 32; j++){
+			double angle = j * 2. * M_PI / 32;
+			glVertex2d(0.7 * cos(angle) + selected->pos.x, .7 * sin(angle) + selected->pos.y);
+		}
+		glEnd();
+	}
+
+	// Debug rendering to check if Tile::object is correctly synchronized
+#if 0
+	glBegin(GL_LINES);
+	glColor4f(0,1,0,1);
+	for(int i = 0; i < ROOMSIZE; i++){
+		for(int j = 0; j < ROOMSIZE; j++){
+			if(!room[i][j].object)
+				continue;
+			glVertex2f(-0.5 + j, -0.5 + i);
+			glVertex2f(0.5 + j, 0.5 + i);
+		}
+	}
+	glEnd();
+#endif
+
 	glPopMatrix();
 
 	glFlush();
@@ -1179,6 +1244,18 @@ void wxGLCanvasSubClass::OnClick(wxMouseEvent& evt){
 	int x = int((vx) * ROOMSIZE);
 	int y = int((vy) * ROOMSIZE);
 	for(auto& it : creeps){
+		if(it.pos.x == x && it.pos.y == y){
+			selected = &it;
+			break;
+		}
+	}
+	for(auto& it : spawns){
+		if(it.pos.x == x && it.pos.y == y){
+			selected = &it;
+			break;
+		}
+	}
+	for(auto& it : mines){
 		if(it.pos.x == x && it.pos.y == y){
 			selected = &it;
 			break;
@@ -1213,6 +1290,7 @@ bool MyApp::OnInit()
 			y = rand() % ROOMSIZE;
 		}while(room[y][x].type != 0);
 		creeps.push_back(Creep(x, y, i % 2));
+		room[y][x].object = creeps.back().id;
 	}
 
 	for(int i = 0; i < 2; i++){
@@ -1222,6 +1300,7 @@ bool MyApp::OnInit()
 			y = rand() % ROOMSIZE;
 		}while(room[y][x].type != 0);
 		spawns.push_back(Spawn(x, y, i));
+		room[y][x].object = spawns.back().id;
 	}
 
 	for(int i = 0; i < 2; i++){
@@ -1231,6 +1310,7 @@ bool MyApp::OnInit()
 			y = rand() % ROOMSIZE;
 		} while(room[y][x].type != 0);
 		mines.push_back(Mine(x, y));
+		room[y][x].object = mines.back().id;
 	}
 
 	const int rightPanelWidth = 300;
@@ -1267,6 +1347,7 @@ bool MyApp::OnInit()
 	selectName->SetFont(titleFont);
 	selectName->SetBackgroundColour(wxColour(63,63,63));
 	new wxStaticText(selectionPanel, ID_SELECT_POS, "", wxPoint(20, 60));
+	new wxStaticText(selectionPanel, ID_SELECT_RESOURCE, "", wxPoint(20, 80));
 
 	wxBoxSizer *rightSizer = new wxBoxSizer(wxVERTICAL);
 	rightSizer->Add(roomPanel, 0, wxEXPAND);
@@ -1507,7 +1588,7 @@ int nonmain(int argc, char *argv[])
 
 	sq_pushstring(sqvm, _SC("RoomPosition"), -1);
 	sq_newclass(sqvm, SQFalse);
-	sq_settypetag(sqvm, -1, _SC("RoomPosition"));
+	sq_settypetag(sqvm, -1, RoomPosition::typetag);
 	sq_setclassudsize(sqvm, -1, sizeof(RoomPosition));
 	sq_pushstring(sqvm, _SC("_get"), -1);
 	sq_newclosure(sqvm, &RoomPosition::sqf_get, 0);
@@ -1553,6 +1634,7 @@ bool Spawn::createCreep(){
 		if(isBlocked(newPos))
 			continue;
 		creeps.push_back(Creep(newPos.x, newPos.y, owner));
+		room[newPos.y][newPos.x].object = creeps.back().id;
 		resource -= creep_cost;
 		return true;
 	}while(++i < numof(directions));
@@ -1568,7 +1650,7 @@ void Spawn::update()
 SQInteger Spawn::sqf_createCreep(HSQUIRRELVM v)
 {
 	SQUserPointer up;
-	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, static_cast<SQUserPointer>(typetag))))
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, typetag)))
 		return sq_throwerror(v, _SC("Invalid this pointer for a spawn"));
 	Spawn *spawn = static_cast<Spawn*>(up);
 	if(!up || !spawn)
@@ -1784,7 +1866,7 @@ SQInteger Mine::sqf_get(HSQUIRRELVM v)
 {
 	wxMutexLocker ml(wxGetApp().mutex);
 	SQUserPointer up;
-	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, nullptr)))
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, typetag)))
 		return sq_throwerror(v, _SC("Invalid this pointer for Spawn"));
 	Mine *mine = static_cast<Mine*>(up);
 	const SQChar *key;
@@ -1796,7 +1878,7 @@ SQInteger Mine::sqf_get(HSQUIRRELVM v)
 		if(SQ_FAILED(sq_get(v, -2)))
 			return sq_throwerror(v, _SC("Can't find RoomPosition class definition"));
 		sq_createinstance(v, -1);
-		sq_getinstanceup(v, -1, &up, nullptr);
+		sq_getinstanceup(v, -1, &up, RoomPosition::typetag);
 		RoomPosition *rp = static_cast<RoomPosition*>(up);
 		*rp = mine->pos;
 		return 1;
