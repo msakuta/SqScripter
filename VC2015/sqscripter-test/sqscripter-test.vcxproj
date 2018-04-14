@@ -137,7 +137,20 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Creep.cpp" />
+    <ClCompile Include="Game.cpp" />
+    <ClCompile Include="Mine.cpp" />
+    <ClCompile Include="RoomObject.cpp" />
+    <ClCompile Include="Spawn.cpp" />
     <ClCompile Include="sqscripter-test.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Creep.h" />
+    <ClInclude Include="Game.h" />
+    <ClInclude Include="Mine.h" />
+    <ClInclude Include="RoomObject.h" />
+    <ClInclude Include="Spawn.h" />
+    <ClInclude Include="sqscripter-test.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
