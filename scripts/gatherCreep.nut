@@ -28,20 +28,15 @@ function main(){
 	}
 
 	local function tryApproach(c, m){
-		local dx = m.pos.x < c.pos.x ? -1 : m.pos.x > c.pos.x ? 1 : 0
-		local dy = m.pos.y < c.pos.y ? -1 : m.pos.y > c.pos.y ? 1 : 0
-		for(local i = 0; i < directions.len(); i++){
-			if(directions[i][0] == dx && directions[i][1] == dy){
-				c.move(i+1)
-				print("Moving " + c.id.tostring() + ": " + i)
-				break
-			}
-		}
+		if(Game.time % 10 == 0)
+			c.findPath(m.pos)
+		c.followPath()
 	}
 
 	foreach(c in Game.creeps){
 		if(c.resource < 100){
-			local m = Game.mines[0]
+			local mines = Game.mines
+			local m = mines[rand() % mines.len()]
 			local dist = distanceOf(c, m)
 			if(dist <= 1){
 				c.harvest(1)

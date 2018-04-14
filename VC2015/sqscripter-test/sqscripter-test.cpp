@@ -46,7 +46,8 @@ extern "C"{
 
 
 struct Tile{
-	int type;
+	uint16_t type;
+	uint16_t creep;
 	int cost; ///< Used for A* pathfinding algorithm
 };
 
@@ -100,31 +101,16 @@ struct Creep : public RoomObject{
 	static const int max_ttl = 1000;
 	static const int max_resource = 100;
 
-	Creep(int x, int y, int owner) : RoomObject(x, y), owner(owner){}
+	Creep(int x, int y, int owner);
 	bool move(int direction);
+	bool move(int dx, int dy);
 	bool harvest(int direction);
 	bool store(int direction);
+	bool findPath(const RoomPosition& pos);
+	bool followPath();
 	void update();
 
-	static void sq_define(HSQUIRRELVM sqvm){
-		sq_pushstring(sqvm, _SC("Creep"), -1);
-		sq_newclass(sqvm, SQFalse);
-		sq_settypetag(sqvm, -1, _SC("Creep"));
-		sq_pushstring(sqvm, _SC("move"), -1);
-		sq_newclosure(sqvm, &Creep::sqf_move, 0);
-		sq_newslot(sqvm, -3, SQFalse);
-		sq_pushstring(sqvm, _SC("harvest"), -1);
-		sq_newclosure(sqvm, &Creep::sqf_harvest, 0);
-		sq_newslot(sqvm, -3, SQFalse);
-		sq_pushstring(sqvm, _SC("store"), -1);
-		sq_newclosure(sqvm, &Creep::sqf_store, 0);
-		sq_newslot(sqvm, -3, SQFalse);
-		sq_pushstring(sqvm, _SC("_get"), -1);
-		sq_newclosure(sqvm, &Creep::sqf_get, 0);
-		sq_newslot(sqvm, -3, SQFalse);
-		sq_newslot(sqvm, -3, SQFalse);
-	}
-
+	static void sq_define(HSQUIRRELVM sqvm);
 	static SQInteger sqf_get(HSQUIRRELVM v);
 	static SQInteger sqf_move(HSQUIRRELVM v);
 	static SQInteger sqf_harvest(HSQUIRRELVM v);
@@ -184,7 +170,7 @@ struct Mine : public RoomObject{
 	typedef Mine tt;
 
 	int id = id_gen++;
-	int resource = 0;
+	int resource = max_resource;
 	static int id_gen;
 	static const int max_resource = 500;
 
@@ -235,8 +221,8 @@ WrenHandle* whmain;
 WrenHandle* whcall;
 WrenHandle* whcallMain;
 
-std::vector<PathNode> findPath(const RoomPosition& from, const RoomPosition& to){
-	auto internal = [to](){
+std::vector<PathNode> findPath(const RoomPosition& from, const RoomPosition& to, const RoomObject& self){
+	auto internal = [to, self](){
 		int changes = 0;
 		for(int y = 0; y < ROOMSIZE; y++){
 			for(int x = 0; x < ROOMSIZE; x++){
@@ -246,6 +232,11 @@ std::vector<PathNode> findPath(const RoomPosition& from, const RoomPosition& to)
 				for(int y1 = std::max(y - 1, 0); y1 <= std::min(y + 1, ROOMSIZE-1); y1++){
 					for(int x1 = std::max(x - 1, 0); x1 <= std::min(x + 1, ROOMSIZE-1); x1++){
 						Tile &tile1 = room[y1][x1];
+
+						// Check if the path is blocked by another creep.
+						if(tile1.creep != 0)
+							continue;
+
 						if(tile1.type == 0 && tile.cost + 1 < tile1.cost){
 							tile1.cost = tile.cost + 1;
 							changes++;
@@ -299,8 +290,7 @@ std::vector<PathNode> findPath(const RoomPosition& from, const RoomPosition& to)
 		}
 		cur.x = bestx;
 		cur.y = besty;
-		if(cur != from)
-			ret.push_back(PathNode(cur, deltaPreferences[besti][0], deltaPreferences[besti][1]));
+		ret.push_back(PathNode(cur, deltaPreferences[besti][0], deltaPreferences[besti][1]));
 	}
 
 	return ret;
@@ -434,7 +424,55 @@ SQInteger RoomPosition::sqf_get(HSQUIRRELVM v)
 		return sq_throwerror(v, _SC("Couldn't find key"));
 }
 
-int Creep::id_gen = 0;
+int Creep::id_gen = 1;
+
+Creep::Creep(int x, int y, int owner) : RoomObject(x, y), owner(owner){
+	room[y][x].creep = id;
+}
+
+void Creep::sq_define(HSQUIRRELVM sqvm){
+	sq_pushstring(sqvm, _SC("Creep"), -1);
+	sq_newclass(sqvm, SQFalse);
+	sq_settypetag(sqvm, -1, _SC("Creep"));
+	sq_pushstring(sqvm, _SC("move"), -1);
+	sq_newclosure(sqvm, &Creep::sqf_move, 0);
+	sq_newslot(sqvm, -3, SQFalse);
+	sq_pushstring(sqvm, _SC("harvest"), -1);
+	sq_newclosure(sqvm, &Creep::sqf_harvest, 0);
+	sq_newslot(sqvm, -3, SQFalse);
+	sq_pushstring(sqvm, _SC("store"), -1);
+	sq_newclosure(sqvm, &Creep::sqf_store, 0);
+	sq_newslot(sqvm, -3, SQFalse);
+	sq_pushstring(sqvm, _SC("findPath"), -1);
+	sq_newclosure(sqvm, [](HSQUIRRELVM v){
+		wxMutexLocker ml(wxGetApp().mutex);
+		SQUserPointer p;
+		Creep *creep;
+		if(SQ_FAILED(sq_getinstanceup(v, 1, &p, nullptr)) || !(creep = (Creep*)p))
+			return sq_throwerror(v, _SC("Broken Creep instance"));
+		RoomPosition *pos;
+		if(SQ_FAILED(sq_getinstanceup(v, 2, &p, nullptr)) || !(pos = (RoomPosition*)p))
+			return sq_throwerror(v, _SC("Couldn't interpret the second argument as RoomPosition"));
+		sq_pushbool(v, creep->findPath(*pos));
+		return SQInteger(1);
+	}, 0);
+	sq_newslot(sqvm, -3, SQFalse);
+	sq_pushstring(sqvm, _SC("followPath"), -1);
+	sq_newclosure(sqvm, [](HSQUIRRELVM v){
+		wxMutexLocker ml(wxGetApp().mutex);
+		SQUserPointer p;
+		Creep *creep;
+		if(SQ_FAILED(sq_getinstanceup(v, 1, &p, nullptr)) || !(creep = (Creep*)p))
+			return sq_throwerror(v, _SC("Broken Creep instance"));
+		sq_pushbool(v, creep->followPath());
+		return SQInteger(1);
+	}, 0);
+	sq_newslot(sqvm, -3, SQFalse);
+	sq_pushstring(sqvm, _SC("_get"), -1);
+	sq_newclosure(sqvm, &Creep::sqf_get, 0);
+	sq_newslot(sqvm, -3, SQFalse);
+	sq_newslot(sqvm, -3, SQFalse);
+}
 
 SQInteger Creep::sqf_get(HSQUIRRELVM v){
 	wxMutexLocker ml(wxGetApp().mutex);
@@ -532,12 +570,18 @@ bool Creep::move(int direction){
 		{-1,0}, // LEFT = 7,
 		{-1,-1}, // TOP_LEFT = 8,
 	};
+	return move(deltas[direction - 1][0], deltas[direction - 1][1]);
+}
+
+bool Creep::move(int dx, int dy){
 	RoomPosition newPos = pos;
-	newPos.x += deltas[direction-1][0];
-	newPos.y += deltas[direction-1][1];
+	newPos.x += dx;
+	newPos.y += dy;
 	if(isBlocked(newPos))
 		return false;
+	room[pos.y][pos.x].creep = 0;
 	pos = newPos;
+	room[pos.y][pos.x].creep = id;
 	return true;
 }
 
@@ -573,6 +617,26 @@ bool Creep::store(int direction)
 			spawn.resource += store_amount;
 			return true;
 		}
+	}
+	return false;
+}
+
+bool Creep::findPath(const RoomPosition& dest){
+	auto ret = ::findPath(this->pos, dest, *this);
+	if(ret.size()){
+		this->path = ret;
+		return true;
+	}
+	return false;
+}
+
+bool Creep::followPath(){
+	if(0 < path.size()){
+		auto& node = path.back();
+		bool ret = move(-node.dx, -node.dy);
+		if(ret)
+			path.pop_back();
+		return ret;
 	}
 	return false;
 }
@@ -688,6 +752,36 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 			wrenSetSlotBool(vm, 0, ret);
 		};
 	}
+	else if(!isStatic && !strcmp(signature, "findPath(_)")){
+		return [](WrenVM* vm){
+			wxMutexLocker ml(wxGetApp().mutex);
+			wrenEnsureSlots(vm, 4);
+			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			Creep *creep = *pp;
+			if(WREN_TYPE_LIST != wrenGetSlotType(vm, 1)){
+				return;
+			}
+			wrenGetListElement(vm, 1, 0, 2);
+			int x = (int)wrenGetSlotDouble(vm, 2);
+			wrenGetListElement(vm, 1, 1, 3);
+			int y = (int)wrenGetSlotDouble(vm, 3);
+			RoomPosition pos(x, y);
+			bool ret = creep->findPath(pos);
+			wrenSetSlotBool(vm, 0, ret);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "followPath()")){
+		return [](WrenVM* vm){
+			wxMutexLocker ml(wxGetApp().mutex);
+			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
+			if(!pp)
+				return;
+			Creep *creep = *pp;
+			wrenSetSlotBool(vm, 0, creep->followPath());
+		};
+	}
 	return nullptr;
 }
 
@@ -792,13 +886,20 @@ void wxGLCanvasSubClass::Paintit(wxPaintEvent& WXUNUSED(event)){
 }
 
 bool isBlocked(const RoomPosition &pos){
-	if(room[pos.y][pos.x].type || pos.x < 0 || ROOMSIZE <= pos.x || pos.y < 0 || ROOMSIZE <= pos.y)
+	if(pos.x < 0 || ROOMSIZE <= pos.x || pos.y < 0 || ROOMSIZE <= pos.y)
 		return true;
-	for(auto& it : creeps){
+	Tile& tile = room[pos.y][pos.x];
+	if(tile.type || tile.creep)
+		return true;
+/*	for(auto& it : creeps){
+		if(it.pos == pos)
+			return true;
+	}*/
+	for(auto& it : spawns){
 		if(it.pos == pos)
 			return true;
 	}
-	for(auto& it : spawns){
+	for(auto& it : mines){
 		if(it.pos == pos)
 			return true;
 	}
@@ -867,6 +968,27 @@ void MyApp::timer(wxTimerEvent&){
 
 	for(auto& it : mines)
 		it.update();
+
+	// Delete pass
+	for(auto it = mines.begin(); it != mines.end();){
+		auto next = it;
+		++next;
+		if(it->resource <= 0)
+			mines.erase(it);
+		it = next;
+	}
+
+	// Create a random mine every 100 frames
+	if((double)rand() / RAND_MAX < 0.01 && mines.size() < 3){
+		int x, y, tries = 0;
+		static const int max_tries = 100;
+		do{
+			x = rand() % ROOMSIZE;
+			y = rand() % ROOMSIZE;
+		} while(isBlocked(RoomPosition(x, y)) && tries++ < max_tries);
+		if(tries < max_tries)
+			mines.push_back(Mine(x, y));
+	}
 
 	// Separating definition of MyApp::timer and MainFrame::update enables us to run the simulation
 	// without windows or graphics, hopefully in the future.
@@ -959,6 +1081,18 @@ void wxGLCanvasSubClass::Render()
 		for(int j = 0; j < 32; j++){
 			double angle = j * 2. * M_PI / 32;
 			glVertex2d(radius * cos(angle) + it.pos.x, radius * sin(angle) + it.pos.y);
+		}
+		glEnd();
+
+		// Path line drawing
+		glColor3f(1, 1, 0);
+		glLineWidth(1);
+		glBegin(GL_LINE_STRIP);
+		int pathx = it.pos.x, pathy = it.pos.y;
+		for(auto& node : it.path){
+			glVertex2d(node.pos.x, node.pos.y);
+			pathx -= node.dx;
+			pathy -= node.dy;
 		}
 		glEnd();
 
@@ -1063,6 +1197,7 @@ void MainFrame::OnClose(wxCloseEvent&){
 
 bool MyApp::OnInit()
 {
+	srand(5326);
 	for(int i = 0; i < ROOMSIZE; i++){
 		int di = i - ROOMSIZE / 2;
 		for(size_t j = 0; j < ROOMSIZE; j++){
@@ -1618,6 +1753,8 @@ int bind_wren(int argc, char *argv[])
 	"	foreign move(i)\n"
 	"	foreign harvest(i)\n"
 	"	foreign store(i)\n"
+	"	foreign findPath(pos)\n"
+	"	foreign followPath()\n"
 	"	foreign id\n"
 	"	foreign owner\n"
 	"	foreign ttl\n"
@@ -1680,8 +1817,8 @@ SQInteger Mine::sqf_get(HSQUIRRELVM v)
 }
 
 void Mine::update(){
-	if(resource < max_resource && global_time % 2 == 0)
-		resource++;
+//	if(resource < max_resource && global_time % 2 == 0)
+//		resource++;
 }
 
 WrenForeignMethodFn Mine::wren_bind(WrenVM * vm, bool isStatic, const char * signature)

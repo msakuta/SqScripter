@@ -1,4 +1,6 @@
 {
+import "random" for Random
+
 var directions = [
 	[0,-1], // TOP = 1,
 	[1,-1], // TOP_RIGHT = 2,
@@ -9,6 +11,8 @@ var directions = [
 	[-1,0], // LEFT = 7,
 	[-1,-1], // TOP_LEFT = 8,
 ]
+
+var random = Random.new(12345)
 
 Game.main = Fn.new {
 	var hasCreep = 1 < Game.creeps.count
@@ -29,20 +33,16 @@ Game.main = Fn.new {
 	}
 
 	var tryApproach = Fn.new {|c, m|
-		var dx = m.pos[0] < c.pos[0] ? -1 : m.pos[0] > c.pos[0] ? 1 : 0
-		var dy = m.pos[1] < c.pos[1] ? -1 : m.pos[1] > c.pos[1] ? 1 : 0
-		for(i in 0..directions.count){
-			if(directions[i][0] == dx && directions[i][1] == dy){
-				c.move(i+1)
-				Game.print("Moving %(c.id): %(i)\n")
-				break
-			}
+		if(Game.time % 10 == 0){
+			c.findPath(m.pos)
 		}
+		c.followPath()
 	}
 
 	for(c in Game.creeps){
 		if(c.resource < 100){
-			var m = Game.mines[0]
+			var mines = Game.mines
+			var m = mines[random.int(mines.count)]
 			var dist = distanceOf.call(c, m)
 			if(dist <= 1){
 				c.harvest(1)
