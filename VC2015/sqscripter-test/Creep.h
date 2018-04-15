@@ -2,8 +2,6 @@
 #define CREEP_H
 #include "RoomObject.h"
 
-#include "wren/src/include/wren.hpp"
-
 #include <cstdint>
 #include <vector>
 

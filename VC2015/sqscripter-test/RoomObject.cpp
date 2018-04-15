@@ -28,6 +28,7 @@ SQInteger RoomPosition::sqf_get(HSQUIRRELVM v)
 }
 
 RoomObject::RoomObject(int x, int y) : pos(x, y){
+	sq_resetobject(&hMemory);
 }
 
 RoomObject::~RoomObject(){

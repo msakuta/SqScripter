@@ -1,7 +1,12 @@
 #ifndef ROOMOBJECT_H
 #define ROOMOBJECT_H
 
+#include "Observable.h"
+
 #include "squirrel.h"
+#include "wren/src/include/wren.hpp"
+
+#include <vector>
 
 struct RoomPosition{
 	int x;
@@ -17,10 +22,16 @@ struct RoomPosition{
 };
 
 
-struct RoomObject{
+struct RoomObject : public Observable{
 	RoomPosition pos;
 	int id = id_gen++;
 	static int id_gen;
+
+	// Scripting VM's memory handle must reside in C++ object member, since VMs only keep track of wrapper objects.
+	HSQOBJECT hMemory;
+	WrenHandle *whMemory = nullptr;
+
+	std::vector<Observer*> observers;
 
 	RoomObject(int x, int y);
 	virtual ~RoomObject();

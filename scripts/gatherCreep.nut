@@ -21,10 +21,14 @@ function main(){
 		}
 	}
 
+	local function max(a,b){
+		return a < b ? b : a
+	}
+
 	local function distanceOf(c, m){
 		local diffx = c.pos.x - m.pos.x
 		local diffy = c.pos.y - m.pos.y
-		return abs(diffx) + abs(diffy)
+		return max(abs(diffx), abs(diffy))
 	}
 
 	local function tryApproach(c, m){
@@ -36,7 +40,7 @@ function main(){
 	foreach(c in Game.creeps){
 		if(c.resource < 100){
 			local mines = Game.mines
-			local m = mines[rand() % mines.len()]
+			local m = c.memory == null || !c.memory.alive ? (c.memory = mines[rand() % mines.len()]) : c.memory
 			local dist = distanceOf(c, m)
 			if(dist <= 1){
 				c.harvest(1)
@@ -47,6 +51,7 @@ function main(){
 			}
 		}
 		else{
+			c.memory = null
 			local s = Game.spawns[c.owner]
 			local dist = distanceOf(c, s)
 			if(dist <= 1){

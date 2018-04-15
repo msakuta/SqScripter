@@ -42,11 +42,11 @@ void Spawn::update()
 SQInteger Spawn::sqf_createCreep(HSQUIRRELVM v)
 {
 	SQUserPointer up;
-	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, typetag)))
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, typetag)) || !up)
 		return sq_throwerror(v, _SC("Invalid this pointer for a spawn"));
-	Spawn *spawn = static_cast<Spawn*>(up);
-	if(!up || !spawn)
-		return sq_throwerror(v, _SC("Invalid this pointer for a spawn"));
+	Spawn *spawn = *static_cast<WeakPtr<Spawn>*>(up);
+	if(!spawn)
+		return sq_throwerror(v, _SC("Spawn object has been deleted"));
 	SQBool b = spawn->createCreep();
 	sq_pushbool(v, b);
 	return 1;
@@ -57,10 +57,18 @@ SQInteger Spawn::sqf_get(HSQUIRRELVM v){
 	SQUserPointer up;
 	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, typetag)))
 		return sq_throwerror(v, _SC("Invalid this pointer for Spawn"));
-	Spawn *spawn = static_cast<Spawn*>(up);
+
 	const SQChar *key;
 	if(SQ_FAILED(sq_getstring(v, 2, &key)))
 		return sq_throwerror(v, _SC("Broken key in _get"));
+
+	Spawn *spawn = *static_cast<WeakPtr<Spawn>*>(up);
+	if(!scstrcmp(key, _SC("alive"))){
+		sq_pushbool(v, spawn != nullptr);
+		return 1;
+	}
+	if(!spawn)
+		return sq_throwerror(v, _SC("Spawn object has been deleted"));
 	if(!scstrcmp(key, _SC("pos"))){
 		sq_pushroottable(v);
 		sq_pushstring(v, _SC("RoomPosition"), -1);
@@ -86,14 +94,26 @@ SQInteger Spawn::sqf_get(HSQUIRRELVM v){
 		return sq_throwerror(v, _SC("Couldn't find key"));
 }
 
+static Spawn *wrenGetSpawn(WrenVM* vm){
+	WeakPtr<Spawn>* pp = (WeakPtr<Spawn>*)wrenGetSlotForeign(vm, 0);
+	if(!pp)
+		return nullptr;
+	return *pp;
+}
+
 WrenForeignMethodFn Spawn::wren_bind(WrenVM * vm, bool isStatic, const char * signature)
 {
-	if(!isStatic && !strcmp(signature, "pos")){
+	if(!isStatic && !strcmp(signature, "alive")){
 		return [](WrenVM* vm){
-			tt** pp = (tt**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Spawn* spawn = wrenGetSpawn(vm);
+			wrenSetSlotBool(vm, 0, spawn != nullptr);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "pos")){
+		return [](WrenVM* vm){
+			Spawn* spawn = wrenGetSpawn(vm);
+			if(!spawn)
 				return;
-			tt *spawn = *pp;
 			wrenEnsureSlots(vm, 2);
 			wrenSetSlotNewList(vm, 0);
 			wrenSetSlotDouble(vm, 1, spawn->pos.x);
@@ -104,41 +124,37 @@ WrenForeignMethodFn Spawn::wren_bind(WrenVM * vm, bool isStatic, const char * si
 	}
 	else if(!isStatic && !strcmp(signature, "id")){
 		return [](WrenVM* vm){
-			tt** pp = (tt**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Spawn* spawn = wrenGetSpawn(vm);
+			if(!spawn)
 				return;
-			tt *creep = *pp;
 			wrenEnsureSlots(vm, 1);
-			wrenSetSlotDouble(vm, 0, creep->id);
+			wrenSetSlotDouble(vm, 0, spawn->id);
 		};
 	}
 	else if(!isStatic && !strcmp(signature, "owner")){
 		return [](WrenVM* vm){
-			tt** pp = (tt**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Spawn* spawn = wrenGetSpawn(vm);
+			if(!spawn)
 				return;
-			tt *creep = *pp;
 			wrenEnsureSlots(vm, 1);
-			wrenSetSlotDouble(vm, 0, creep->owner);
+			wrenSetSlotDouble(vm, 0, spawn->owner);
 		};
 	}
 	else if(!isStatic && !strcmp(signature, "resource")){
 		return [](WrenVM* vm){
-			tt** pp = (tt**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Spawn* spawn = wrenGetSpawn(vm);
+			if(!spawn)
 				return;
-			tt *creep = *pp;
 			wrenEnsureSlots(vm, 1);
-			wrenSetSlotDouble(vm, 0, creep->resource);
+			wrenSetSlotDouble(vm, 0, spawn->resource);
 		};
 	}
 	else if(!isStatic && !strcmp(signature, "createCreep()")){
 		return [](WrenVM* vm){
 			wxMutexLocker ml(wxGetApp().mutex);
-			tt** pp = (tt**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Spawn* spawn = wrenGetSpawn(vm);
+			if(!spawn)
 				return;
-			tt *spawn = *pp;
 			wrenSetSlotBool(vm, 0, spawn->createCreep());
 		};
 	}

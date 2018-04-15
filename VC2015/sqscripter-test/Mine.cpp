@@ -13,10 +13,18 @@ SQInteger Mine::sqf_get(HSQUIRRELVM v)
 	SQUserPointer up;
 	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, typetag)))
 		return sq_throwerror(v, _SC("Invalid this pointer for Spawn"));
-	Mine *mine = static_cast<Mine*>(up);
+
 	const SQChar *key;
 	if(SQ_FAILED(sq_getstring(v, 2, &key)))
 		return sq_throwerror(v, _SC("Broken key in _get"));
+
+	Mine *mine = *static_cast<WeakPtr<Mine>*>(up);
+	if(!scstrcmp(key, _SC("alive"))){
+		sq_pushbool(v, mine != nullptr);
+		return 1;
+	}
+	if(!mine)
+		return sq_throwerror(v, _SC("Mine object has been deleted"));
 	if(!scstrcmp(key, _SC("pos"))){
 		sq_pushroottable(v);
 		sq_pushstring(v, _SC("RoomPosition"), -1);
@@ -48,14 +56,26 @@ void Mine::update(){
 	//		resource++;
 }
 
+static Mine *wrenGetMine(WrenVM* vm){
+	WeakPtr<Mine>* pp = (WeakPtr<Mine>*)wrenGetSlotForeign(vm, 0);
+	if(!pp)
+		return nullptr;
+	return *pp;
+}
+
 WrenForeignMethodFn Mine::wren_bind(WrenVM * vm, bool isStatic, const char * signature)
 {
-	if(!isStatic && !strcmp(signature, "pos")){
+	if(!isStatic && !strcmp(signature, "alive")){
 		return [](WrenVM* vm){
-			tt** pp = (tt**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Mine* mine = wrenGetMine(vm);
+			wrenSetSlotBool(vm, 0, mine != nullptr);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "pos")){
+		return [](WrenVM* vm){
+			Mine* mine = wrenGetMine(vm);
+			if(!mine)
 				return;
-			tt *mine = *pp;
 			wrenEnsureSlots(vm, 2);
 			wrenSetSlotNewList(vm, 0);
 			wrenSetSlotDouble(vm, 1, mine->pos.x);
@@ -66,22 +86,20 @@ WrenForeignMethodFn Mine::wren_bind(WrenVM * vm, bool isStatic, const char * sig
 	}
 	else if(!isStatic && !strcmp(signature, "id")){
 		return [](WrenVM* vm){
-			tt** pp = (tt**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Mine* mine = wrenGetMine(vm);
+			if(!mine)
 				return;
-			tt *mine = *pp;
 			wrenEnsureSlots(vm, 1);
 			wrenSetSlotDouble(vm, 0, mine->id);
 		};
 	}
 	else if(!isStatic && !strcmp(signature, "resource")){
 		return [](WrenVM* vm){
-			tt** pp = (tt**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Mine* mine = wrenGetMine(vm);
+			if(!mine)
 				return;
-			tt *creep = *pp;
 			wrenEnsureSlots(vm, 1);
-			wrenSetSlotDouble(vm, 0, creep->resource);
+			wrenSetSlotDouble(vm, 0, mine->resource);
 		};
 	}
 	return WrenForeignMethodFn();

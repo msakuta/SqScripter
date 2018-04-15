@@ -26,23 +26,33 @@ Game.main = Fn.new {
 		}
 	}
 
+	var max = Fn.new {|a,b|
+		return a < b ? b : a
+	}
+
 	var distanceOf = Fn.new {|c, m|
 		var diffx = c.pos[0] - m.pos[0]
 		var diffy = c.pos[1] - m.pos[1]
-		return diffx.abs + diffy.abs
+		return max.call(diffx.abs, diffy.abs)
 	}
 
 	var tryApproach = Fn.new {|c, m|
+		var ret = true
 		if(Game.time % 10 == 0){
-			c.findPath(m.pos)
+			ret = c.findPath(m.pos)
+			// If path finding failed, clear the bad memory
+			if(!ret){
+				c.memory = null
+			}
 		}
 		c.followPath()
+		return ret
 	}
 
 	for(c in Game.creeps){
 		if(c.resource < 100){
 			var mines = Game.mines
-			var m = mines[random.int(mines.count)]
+			var m = c.memory == null || !c.memory.alive ? (c.memory = mines[random.int(mines.count)]) : c.memory
 			var dist = distanceOf.call(c, m)
 			if(dist <= 1){
 				c.harvest(1)

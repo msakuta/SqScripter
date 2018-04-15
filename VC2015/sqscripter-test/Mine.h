@@ -25,6 +25,7 @@ struct Mine : public RoomObject{
 	static void sq_define(HSQUIRRELVM v){
 		sq_pushstring(v, _SC("Mine"), -1);
 		sq_newclass(v, SQFalse);
+		sq_setclassudsize(v, -1, sizeof(WeakPtr<Mine>));
 		sq_settypetag(v, -1, typetag);
 		sq_pushstring(v, _SC("_get"), -1);
 		sq_newclosure(v, &sqf_get, 0);

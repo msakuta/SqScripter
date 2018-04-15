@@ -695,17 +695,33 @@ static WrenForeignMethodFn bindForeignMethod(
 	return nullptr;
 }
 
+template<typename T>
+static void genericAllocate(WrenVM *vm){
+	WeakPtr<T>* pp = (WeakPtr<T>*)wrenSetSlotNewForeign(vm, 0, 0, sizeof(WeakPtr<T>));
+}
+
+template<typename T>
+static void genericFinalize(void *pv){
+	WeakPtr<T>* pp = (WeakPtr<T>*)pv;
+	pp->~WeakPtr<T>();
+}
+
 WrenForeignClassMethods bindForeignClass(
 	WrenVM* vm, const char* module, const char* className)
 {
 	WrenForeignClassMethods methods;
 
-	if(strcmp(className, "Creep") == 0)
-	{
-		methods.allocate = [](WrenVM* vm){
-			Creep** pp = (Creep**)wrenSetSlotNewForeign(vm, 0, 0, sizeof(FILE*));
-		};
-		methods.finalize = nullptr;
+	if(strcmp(className, "Creep") == 0){
+		methods.allocate = genericAllocate<Creep>;
+		methods.finalize = genericFinalize<Creep>;
+	}
+	else if(strcmp(className, "Spawn") == 0){
+		methods.allocate = genericAllocate<Spawn>;
+		methods.finalize = genericFinalize<Spawn>;
+	}
+	else if(strcmp(className, "Mine") == 0){
+		methods.allocate = genericAllocate<Mine>;
+		methods.finalize = genericFinalize<Mine>;
 	}
 	else
 	{
@@ -743,6 +759,7 @@ int bind_wren(int argc, char *argv[])
 	"	}\n"
 	"}\n"
 	"foreign class Creep{\n"
+	"	foreign alive\n"
 	"	foreign pos\n"
 	"	foreign move(i)\n"
 	"	foreign harvest(i)\n"
@@ -753,8 +770,11 @@ int bind_wren(int argc, char *argv[])
 	"	foreign owner\n"
 	"	foreign ttl\n"
 	"	foreign resource\n"
+	"	foreign memory\n"
+	"	foreign memory=(newMemory)\n"
 	"}\n"
 	"foreign class Spawn{\n"
+	"	foreign alive\n"
 	"	foreign pos\n"
 	"	foreign createCreep()\n"
 	"	foreign id\n"
@@ -762,6 +782,7 @@ int bind_wren(int argc, char *argv[])
 	"	foreign resource\n"
 	"}\n"
 	"foreign class Mine{\n"
+	"	foreign alive\n"
 	"	foreign pos\n"
 	"	foreign id\n"
 	"	foreign resource\n"

@@ -192,7 +192,14 @@ SQInteger Game::sqf_get(HSQUIRRELVM v){
 				return sq_throwerror(v, _SC("Failed to create creeps array"));
 			sq_pushinteger(v, i++); // root Creep i
 			sq_createinstance(v, -2); // root Creep i inst
-			sq_setinstanceup(v, -1, &it);
+			SQUserPointer up;
+			sq_getinstanceup(v, -1, &up, Creep::typetag); // array Spawn i inst
+			WeakPtr<Creep>* wp = new(up) WeakPtr<Creep>(&it);
+			sq_setreleasehook(v, -1, [](SQUserPointer up, SQInteger size){
+				WeakPtr<Creep>* wp = (WeakPtr<Creep>*)up;
+				wp->~WeakPtr<Creep>();
+				return SQInteger(1);
+			});
 			if(SQ_FAILED(sq_set(v, -5))) // root Creep
 				return sq_throwerror(v, _SC("Failed to create creeps array"));
 			sq_pop(v, 2);
@@ -207,7 +214,14 @@ SQInteger Game::sqf_get(HSQUIRRELVM v){
 			sq_pushobject(v, Spawn::spawnClass); // array Spawn
 			sq_pushinteger(v, i++); // array Spawn i
 			sq_createinstance(v, -2); // array Spawn i inst
-			sq_setinstanceup(v, -1, &it); // array Spawn i inst
+			SQUserPointer up;
+			sq_getinstanceup(v, -1, &up, Spawn::typetag); // array Spawn i inst
+			WeakPtr<Spawn>* wp = new(up) WeakPtr<Spawn>(&it);
+			sq_setreleasehook(v, -1, [](SQUserPointer up, SQInteger size){
+				WeakPtr<Spawn>* wp = (WeakPtr<Spawn>*)up;
+				wp->~WeakPtr<Spawn>();
+				return SQInteger(1);
+			});
 			if(SQ_FAILED(sq_set(v, -4))) // array Spawn
 				return sq_throwerror(v, _SC("Failed to create creeps array"));
 			sq_pop(v, 1); // array
@@ -222,7 +236,14 @@ SQInteger Game::sqf_get(HSQUIRRELVM v){
 			sq_pushobject(v, Mine::mineClass); // array Mine
 			sq_pushinteger(v, i++); // array Mine i
 			sq_createinstance(v, -2); // array Mine i inst
-			sq_setinstanceup(v, -1, &it); // array Mine i inst
+			SQUserPointer up;
+			sq_getinstanceup(v, -1, &up, Mine::typetag); // array Mine i inst
+			WeakPtr<Mine>* wp = new(up) WeakPtr<Mine>(&it);
+			sq_setreleasehook(v, -1, [](SQUserPointer up, SQInteger size){
+				WeakPtr<Mine>* wp = (WeakPtr<Mine>*)up;
+				wp->~WeakPtr<Mine>();
+				return SQInteger(1);
+			});
 			if(SQ_FAILED(sq_set(v, -4))) // array Mine
 				return sq_throwerror(v, _SC("Failed to create creeps array"));
 			sq_pop(v, 1); // array
@@ -271,10 +292,10 @@ WrenForeignMethodFn Game::wren_bind(WrenVM * vm, bool isStatic, const char * sig
 			}
 			wrenEnsureSlots(vm, 2);
 			wrenGetVariable(vm, "main", "Creep", 1);
-			void *pp = wrenSetSlotNewForeign(vm, 0, 1, sizeof(Creep*));
+			void *pp = wrenSetSlotNewForeign(vm, 0, 1, sizeof(WeakPtr<Creep>));
 			auto cp = game.creeps.begin();
 			for(int i = 0; i < idx && cp != game.creeps.end(); ++cp, ++i);
-			*(Creep**)pp = &*cp;
+			new(pp) WeakPtr<Creep>(&*cp);
 		};
 	}
 	else if(isStatic && strcmp(signature, "creeps") == 0)
@@ -285,8 +306,8 @@ WrenForeignMethodFn Game::wren_bind(WrenVM * vm, bool isStatic, const char * sig
 			wrenSetSlotNewList(vm, 0);
 			wrenGetVariable(vm, "main", "Creep", 1);
 			for(auto& it : game.creeps){
-				void *pp = wrenSetSlotNewForeign(vm, 2, 1, sizeof(Creep*));
-				*(Creep**)pp = &it;
+				void *pp = wrenSetSlotNewForeign(vm, 2, 1, sizeof(WeakPtr<Creep>));
+				new(pp) WeakPtr<Creep>(&it);
 				wrenInsertInList(vm, 0, -1, 2);
 			}
 		};
@@ -298,8 +319,8 @@ WrenForeignMethodFn Game::wren_bind(WrenVM * vm, bool isStatic, const char * sig
 			wrenSetSlotNewList(vm, 0);
 			wrenGetVariable(vm, "main", "Spawn", 1);
 			for(auto& it : game.spawns){
-				void *pp = wrenSetSlotNewForeign(vm, 2, 1, sizeof(Spawn*));
-				*(Spawn**)pp = &it;
+				void *pp = wrenSetSlotNewForeign(vm, 2, 1, sizeof(WeakPtr<Spawn>));
+				new(pp) WeakPtr<Spawn>(&it);
 				wrenInsertInList(vm, 0, -1, 2);
 			}
 		};
@@ -309,10 +330,10 @@ WrenForeignMethodFn Game::wren_bind(WrenVM * vm, bool isStatic, const char * sig
 			// Slots: [array] main.Creep [instance]
 			wrenEnsureSlots(vm, 3);
 			wrenSetSlotNewList(vm, 0);
-			wrenGetVariable(vm, "main", "Spawn", 1);
+			wrenGetVariable(vm, "main", "Mine", 1);
 			for(auto& it : game.mines){
-				void *pp = wrenSetSlotNewForeign(vm, 2, 1, sizeof(Mine*));
-				*(Mine**)pp = &it;
+				void *pp = wrenSetSlotNewForeign(vm, 2, 1, sizeof(WeakPtr<Mine>));
+				new(pp) WeakPtr<Mine>(&it);
 				wrenInsertInList(vm, 0, -1, 2);
 			}
 		};

@@ -140,6 +140,7 @@
     <ClCompile Include="Creep.cpp" />
     <ClCompile Include="Game.cpp" />
     <ClCompile Include="Mine.cpp" />
+    <ClCompile Include="Observable.cpp" />
     <ClCompile Include="RoomObject.cpp" />
     <ClCompile Include="Spawn.cpp" />
     <ClCompile Include="sqscripter-test.cpp" />
@@ -148,6 +149,7 @@
     <ClInclude Include="Creep.h" />
     <ClInclude Include="Game.h" />
     <ClInclude Include="Mine.h" />
+    <ClInclude Include="Observable.h" />
     <ClInclude Include="RoomObject.h" />
     <ClInclude Include="Spawn.h" />
     <ClInclude Include="sqscripter-test.h" />

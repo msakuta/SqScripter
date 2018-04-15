@@ -98,6 +98,7 @@ Creep::Creep(int x, int y, int owner) : RoomObject(x, y), owner(owner){}
 void Creep::sq_define(HSQUIRRELVM sqvm){
 	sq_pushstring(sqvm, _SC("Creep"), -1);
 	sq_newclass(sqvm, SQFalse);
+	sq_setclassudsize(sqvm, -1, sizeof(WeakPtr<Creep>));
 	sq_settypetag(sqvm, -1, typetag);
 	sq_pushstring(sqvm, _SC("move"), -1);
 	sq_newclosure(sqvm, &Creep::sqf_move, 0);
@@ -113,7 +114,7 @@ void Creep::sq_define(HSQUIRRELVM sqvm){
 		wxMutexLocker ml(wxGetApp().mutex);
 		SQUserPointer p;
 		Creep *creep;
-		if(SQ_FAILED(sq_getinstanceup(v, 1, &p, typetag)) || !(creep = (Creep*)p))
+		if(SQ_FAILED(sq_getinstanceup(v, 1, &p, typetag)) || !(creep = *(WeakPtr<Creep>*)p))
 			return sq_throwerror(v, _SC("Broken Creep instance"));
 		RoomPosition *pos;
 		if(SQ_FAILED(sq_getinstanceup(v, 2, &p, RoomPosition::typetag)) || !(pos = (RoomPosition*)p))
@@ -127,7 +128,7 @@ void Creep::sq_define(HSQUIRRELVM sqvm){
 		wxMutexLocker ml(wxGetApp().mutex);
 		SQUserPointer p;
 		Creep *creep;
-		if(SQ_FAILED(sq_getinstanceup(v, 1, &p, typetag)) || !(creep = (Creep*)p))
+		if(SQ_FAILED(sq_getinstanceup(v, 1, &p, typetag)) || !(creep = *(WeakPtr<Creep>*)p))
 			return sq_throwerror(v, _SC("Broken Creep instance"));
 		sq_pushbool(v, creep->followPath());
 		return SQInteger(1);
@@ -135,6 +136,28 @@ void Creep::sq_define(HSQUIRRELVM sqvm){
 	sq_newslot(sqvm, -3, SQFalse);
 	sq_pushstring(sqvm, _SC("_get"), -1);
 	sq_newclosure(sqvm, &Creep::sqf_get, 0);
+	sq_newslot(sqvm, -3, SQFalse);
+	sq_pushstring(sqvm, _SC("_set"), -1);
+	sq_newclosure(sqvm, [](HSQUIRRELVM v){
+		wxMutexLocker ml(wxGetApp().mutex);
+		SQUserPointer up;
+		if(SQ_FAILED(sq_getinstanceup(v, 1, &up, typetag)))
+			return sq_throwerror(v, _SC("Invalid this pointer"));
+		Creep *creep = *static_cast<WeakPtr<Creep>*>(up);
+		const SQChar *key;
+		if(SQ_FAILED(sq_getstring(v, 2, &key)))
+			return sq_throwerror(v, _SC("Broken key in _get"));
+		if(!scstrcmp(key, _SC("memory"))){
+			HSQOBJECT obj;
+			if(SQ_FAILED(sq_getstackobj(v, 3, &obj)))
+				return sq_throwerror(v, _SC("Couldn't set memory"));
+			sq_release(v, &creep->hMemory);
+			creep->hMemory = obj;
+			sq_addref(v, &creep->hMemory);
+			return SQInteger(1);
+		}
+		return SQInteger(0);
+	}, 0);
 	sq_newslot(sqvm, -3, SQFalse);
 	sq_newslot(sqvm, -3, SQFalse);
 }
@@ -144,10 +167,19 @@ SQInteger Creep::sqf_get(HSQUIRRELVM v){
 	SQUserPointer up;
 	if(SQ_FAILED(sq_getinstanceup(v, 1, &up, typetag)))
 		return sq_throwerror(v, _SC("Invalid this pointer"));
-	Creep *creep = static_cast<Creep*>(up);
+
 	const SQChar *key;
 	if(SQ_FAILED(sq_getstring(v, 2, &key)))
 		return sq_throwerror(v, _SC("Broken key in _get"));
+
+	Creep *creep = *static_cast<WeakPtr<Creep>*>(up);
+	if(!scstrcmp(key, _SC("alive"))){
+		sq_pushbool(v, creep != nullptr);
+		return 1;
+	}
+	if(!creep)
+		return sq_throwerror(v, _SC("Creep object has been deleted"));
+
 	if(!scstrcmp(key, _SC("pos"))){
 		sq_pushroottable(v);
 		sq_pushstring(v, _SC("RoomPosition"), -1);
@@ -169,6 +201,11 @@ SQInteger Creep::sqf_get(HSQUIRRELVM v){
 		sq_pushinteger(v, creep->owner);
 		return 1;
 	}
+	else if(!scstrcmp(key, _SC("memory"))){
+		sq_pushroottable(v);
+		sq_pushobject(v, creep->hMemory);
+		return 1;
+	}
 	else if(!scstrcmp(key, _SC("ttl"))){
 		sq_pushroottable(v);
 		sq_pushinteger(v, creep->ttl);
@@ -187,7 +224,7 @@ SQInteger Creep::sqf_move(HSQUIRRELVM v){
 	wxMutexLocker ml(wxGetApp().mutex);
 	SQUserPointer p;
 	Creep *creep;
-	if(SQ_FAILED(sq_getinstanceup(v, 1, &p, typetag)) || !(creep = (Creep*)p))
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &p, typetag)) || !(creep = *(WeakPtr<Creep>*)p))
 		return sq_throwerror(v, _SC("Broken Creep instance"));
 	SQInteger i;
 	if(SQ_FAILED(sq_getinteger(v, 2, &i)) || i < TOP || TOP_LEFT < i)
@@ -201,7 +238,7 @@ SQInteger Creep::sqf_harvest(HSQUIRRELVM v)
 	wxMutexLocker ml(wxGetApp().mutex);
 	SQUserPointer p;
 	Creep *creep;
-	if(SQ_FAILED(sq_getinstanceup(v, 1, &p, typetag)) || !(creep = (Creep*)p))
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &p, typetag)) || !(creep = *(WeakPtr<Creep>*)p))
 		return sq_throwerror(v, _SC("Broken Creep instance"));
 	SQInteger i;
 	if(SQ_FAILED(sq_getinteger(v, 2, &i)) || i < TOP || TOP_LEFT < i)
@@ -215,7 +252,7 @@ SQInteger Creep::sqf_store(HSQUIRRELVM v)
 	wxMutexLocker ml(wxGetApp().mutex);
 	SQUserPointer p;
 	Creep *creep;
-	if(SQ_FAILED(sq_getinstanceup(v, 1, &p, typetag)) || !(creep = (Creep*)p))
+	if(SQ_FAILED(sq_getinstanceup(v, 1, &p, typetag)) || !(creep = *(WeakPtr<Creep>*)p))
 		return sq_throwerror(v, _SC("Broken Creep instance"));
 	SQInteger i;
 	if(SQ_FAILED(sq_getinteger(v, 2, &i)) || i < TOP || TOP_LEFT < i)
@@ -253,7 +290,7 @@ bool Creep::move(int dx, int dy){
 bool Creep::harvest(int direction)
 {
 	for(auto& mine : game.mines){
-		int dist = std::max(mine.pos.x - pos.x, mine.pos.y - pos.y);
+		int dist = std::max(std::abs(mine.pos.x - pos.x), std::abs(mine.pos.y - pos.y));
 		if(dist <= 1 && 0 < mine.resource){
 			int harvest_amount = 10;
 			if(mine.resource < harvest_amount)
@@ -271,7 +308,7 @@ bool Creep::harvest(int direction)
 bool Creep::store(int direction)
 {
 	for(auto& spawn : game.spawns){
-		int dist = std::max(spawn.pos.x - pos.x, spawn.pos.y - pos.y);
+		int dist = std::max(std::abs(spawn.pos.x - pos.x), std::abs(spawn.pos.y - pos.y));
 		if(dist <= 1 && 0 < resource){
 			int store_amount = resource;
 			if(spawn.resource < store_amount)
@@ -313,14 +350,26 @@ void Creep::update()
 	ttl--;
 }
 
+static Creep *wrenGetCreep(WrenVM* vm){
+	WeakPtr<Creep>* pp = (WeakPtr<Creep>*)wrenGetSlotForeign(vm, 0);
+	if(!pp)
+		return nullptr;
+	return *pp;
+}
+
 WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * signature)
 {
-	if(!isStatic && !strcmp(signature, "pos")){
+	if(!isStatic && !strcmp(signature, "alive")){
 		return [](WrenVM* vm){
-			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Creep* creep = wrenGetCreep(vm);
+			wrenSetSlotBool(vm, 0, creep != nullptr);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "pos")){
+		return [](WrenVM* vm){
+			Creep* creep = wrenGetCreep(vm);
+			if(!creep)
 				return;
-			Creep *creep = *pp;
 			wrenEnsureSlots(vm, 2);
 			wrenSetSlotNewList(vm, 0);
 			wrenSetSlotDouble(vm, 1, creep->pos.x);
@@ -331,51 +380,66 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 	}
 	else if(!isStatic && !strcmp(signature, "id")){
 		return [](WrenVM* vm){
-			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Creep* creep = wrenGetCreep(vm);
+			if(!creep)
 				return;
-			Creep *creep = *pp;
 			wrenEnsureSlots(vm, 1);
 			wrenSetSlotDouble(vm, 0, creep->id);
 		};
 	}
 	else if(!isStatic && !strcmp(signature, "owner")){
 		return [](WrenVM* vm){
-			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Creep* creep = wrenGetCreep(vm);
+			if(!creep)
 				return;
-			Creep *creep = *pp;
 			wrenEnsureSlots(vm, 1);
 			wrenSetSlotDouble(vm, 0, creep->owner);
 		};
 	}
 	else if(!isStatic && !strcmp(signature, "ttl")){
 		return [](WrenVM* vm){
-			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Creep* creep = wrenGetCreep(vm);
+			if(!creep)
 				return;
-			Creep *creep = *pp;
 			wrenEnsureSlots(vm, 1);
 			wrenSetSlotDouble(vm, 0, creep->ttl);
 		};
 	}
 	else if(!isStatic && !strcmp(signature, "resource")){
 		return [](WrenVM* vm){
-			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Creep* creep = wrenGetCreep(vm);
+			if(!creep)
 				return;
-			Creep *creep = *pp;
 			wrenEnsureSlots(vm, 1);
 			wrenSetSlotDouble(vm, 0, creep->resource);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "memory")){
+		return [](WrenVM* vm){
+			Creep* creep = wrenGetCreep(vm);
+			if(!creep)
+				return;
+			wrenEnsureSlots(vm, 1);
+			if(creep->whMemory)
+				wrenSetSlotHandle(vm, 0, creep->whMemory);
+			else
+				wrenSetSlotNull(vm, 0);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "memory=(_)")){
+		return [](WrenVM* vm){
+			Creep* creep = wrenGetCreep(vm);
+			if(!creep)
+				return;
+			creep->whMemory = wrenGetSlotHandle(vm, 1);
 		};
 	}
 	else if(!isStatic && !strcmp(signature, "move(_)")){
 		return [](WrenVM* vm){
 			wxMutexLocker ml(wxGetApp().mutex);
-			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Creep* creep = wrenGetCreep(vm);
+			if(!creep)
 				return;
-			Creep *creep = *pp;
 			if(WREN_TYPE_NUM != wrenGetSlotType(vm, 1)){
 				return;
 			}
@@ -388,10 +452,9 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 	else if(!isStatic && !strcmp(signature, "harvest(_)")){
 		return [](WrenVM* vm){
 			wxMutexLocker ml(wxGetApp().mutex);
-			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Creep* creep = wrenGetCreep(vm);
+			if(!creep)
 				return;
-			Creep *creep = *pp;
 			if(WREN_TYPE_NUM != wrenGetSlotType(vm, 1)){
 				return;
 			}
@@ -404,10 +467,9 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 	else if(!isStatic && !strcmp(signature, "store(_)")){
 		return [](WrenVM* vm){
 			wxMutexLocker ml(wxGetApp().mutex);
-			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Creep* creep = wrenGetCreep(vm);
+			if(!creep)
 				return;
-			Creep *creep = *pp;
 			if(WREN_TYPE_NUM != wrenGetSlotType(vm, 1)){
 				return;
 			}
@@ -421,10 +483,9 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 		return [](WrenVM* vm){
 			wxMutexLocker ml(wxGetApp().mutex);
 			wrenEnsureSlots(vm, 4);
-			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Creep* creep = wrenGetCreep(vm);
+			if(!creep)
 				return;
-			Creep *creep = *pp;
 			if(WREN_TYPE_LIST != wrenGetSlotType(vm, 1)){
 				return;
 			}
@@ -440,10 +501,9 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 	else if(!isStatic && !strcmp(signature, "followPath()")){
 		return [](WrenVM* vm){
 			wxMutexLocker ml(wxGetApp().mutex);
-			Creep** pp = (Creep**)wrenGetSlotForeign(vm, 0);
-			if(!pp)
+			Creep* creep = wrenGetCreep(vm);
+			if(!creep)
 				return;
-			Creep *creep = *pp;
 			wrenSetSlotBool(vm, 0, creep->followPath());
 		};
 	}
