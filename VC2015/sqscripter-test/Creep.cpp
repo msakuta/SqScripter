@@ -14,37 +14,49 @@ extern "C"{
 const SQUserPointer Creep::typetag = _SC("Creep");
 
 std::vector<PathNode> findPath(const RoomPosition& from, const RoomPosition& to, const RoomObject& self){
-	auto internal = [&to, &self](){
+	// List of positions to start calculating cost.
+	// Using std::vector to cache the next candidates is surprizingly efficient,
+	// because the number of target positions in one iteration is orders of magnitude smaller than the total number of tiles.
+	// Also surprizingly, we don't need std::set to exclude duplicates, because the same candidate is already marked solved by assigning
+	// non-infinity cost.  If we used std::set, it would take cost in performance to build hash table.
+	std::vector<RoomPosition> targetList[2];
+	auto currentTargets = &targetList[0];
+	auto nextTargets = &targetList[1];
+
+	auto internal = [&to, &self, &currentTargets, &nextTargets](){
 		int changes = 0;
-		for(int y = 0; y < ROOMSIZE; y++){
-			for(int x = 0; x < ROOMSIZE; x++){
-				Tile &tile = game.room[y][x];
-				if(tile.cost == INT_MAX)
-					continue;
-				for(int y1 = std::max(y - 1, 0); y1 <= std::min(y + 1, ROOMSIZE - 1); y1++){
-					for(int x1 = std::max(x - 1, 0); x1 <= std::min(x + 1, ROOMSIZE - 1); x1++){
-						Tile &tile1 = game.room[y1][x1];
+		for(auto& it : *currentTargets){
+			int x = it.x;
+			int y = it.y;
+			Tile &tile = game.room[y][x];
+			if(tile.cost == INT_MAX)
+				continue;
+			for(int y1 = std::max(y - 1, 0); y1 <= std::min(y + 1, ROOMSIZE - 1); y1++){
+				for(int x1 = std::max(x - 1, 0); x1 <= std::min(x + 1, ROOMSIZE - 1); x1++){
+					Tile &tile1 = game.room[y1][x1];
 
-						// Ignore collision with destination (assume we're ok with tile next to it)
-						if(to.x == x1 && to.y == y1){
-							tile1.cost = tile.cost + 1;
-							return 0;
-						}
+					// Ignore collision with destination (assume we're ok with tile next to it)
+					if(to.x == x1 && to.y == y1){
+						tile1.cost = tile.cost + 1;
+						return 0;
+					}
 
-						// Check if the path is blocked by another creep.
-						if(tile1.object != 0 && tile1.object != self.id)
-							continue;
+					// Check if the path is blocked by another creep.
+					if(tile1.object != 0 && tile1.object != self.id)
+						continue;
 
-						if(tile1.type == 0 && tile.cost + 1 < tile1.cost){
-							tile1.cost = tile.cost + 1;
-							changes++;
-						}
+					if(tile1.type == 0 && tile.cost + 1 < tile1.cost){
+						tile1.cost = tile.cost + 1;
+						nextTargets->push_back(RoomPosition(x1, y1));
+						changes++;
 					}
 				}
 			}
 		}
 		return changes;
 	};
+
+	currentTargets->push_back(from);
 
 	for(int y = 0; y < ROOMSIZE; y++){
 		for(int x = 0; x < ROOMSIZE; x++){
@@ -55,7 +67,12 @@ std::vector<PathNode> findPath(const RoomPosition& from, const RoomPosition& to,
 
 	std::vector<PathNode> ret;
 
-	while(internal());
+	while(internal()){
+		// Swap the buffers for the next iteration.
+		// std::vector::clear() keeps the reserved buffer, which is very efficient to reuse.
+		currentTargets->clear();
+		std::swap(currentTargets, nextTargets);
+	}
 
 	Tile &destTile = game.room[to.y][to.x];
 	if(destTile.cost == INT_MAX)

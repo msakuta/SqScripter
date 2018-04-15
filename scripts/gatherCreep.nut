@@ -32,8 +32,13 @@ function main(){
 	}
 
 	local function tryApproach(c, m){
-		if(Game.time % 10 == 0)
-			c.findPath(m.pos)
+		if(Game.time % 10 == 0){
+			local ret = c.findPath(m.pos)
+			// If path finding failed, clear the bad memory
+			if(!ret){
+				c.memory = null
+			}
+		}
 		c.followPath()
 	}
 
