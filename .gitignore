@@ -18,3 +18,5 @@
 *.opensdf
 *.exp
 *.bsc
+/VC2015/sqscripter-test/doc/_build/
+/VC2015/sqscripter-test/doc/_latex/
