@@ -15,7 +15,7 @@ var directions = [
 var random = Random.new(12345)
 
 Game.main = Fn.new {
-	var hasCreep = 1 < Game.creeps.count
+	var hasCreep = 5 < Game.creeps.count
 	if(!hasCreep){
 		for(s in Game.spawns){
 			var c = s.createCreep()
@@ -31,8 +31,9 @@ Game.main = Fn.new {
 	}
 
 	var distanceOf = Fn.new {|c, m|
-		var diffx = c.pos[0] - m.pos[0]
-		var diffy = c.pos[1] - m.pos[1]
+		var diffx = c.pos.x - m.pos.x
+		var diffy = c.pos.y - m.pos.y
+		//Game.print("diff: %(diffx), %(diffy), max: %(max.call(diffx.abs, diffy.abs) <= 1)\n")
 		return max.call(diffx.abs, diffy.abs)
 	}
 
@@ -52,7 +53,10 @@ Game.main = Fn.new {
 	for(c in Game.creeps){
 		if(c.resource < 100){
 			var mines = Game.mines
-			var m = c.memory == null || !c.memory.alive ? (c.memory = mines[random.int(mines.count)]) : c.memory
+			if((c.memory == null || !c.memory.alive) && 0 < mines.count){
+				c.memory = mines[random.int(mines.count)]
+			}
+			var m = c.memory
 			var dist = distanceOf.call(c, m)
 			if(dist <= 1){
 				c.harvest(1)

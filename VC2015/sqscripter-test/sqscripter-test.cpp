@@ -678,6 +678,22 @@ static WrenForeignMethodFn bindForeignMethod(
 		{
 			return Game::wren_bind(vm, isStatic, signature);
 		}
+		else if(strcmp(className, "RoomPosition") == 0){
+			if(!isStatic && !strcmp(signature, "x")){
+				return [](WrenVM* vm){
+					RoomPosition* pos = static_cast<RoomPosition*>(wrenGetSlotForeign(vm, 0));
+					if(pos)
+						wrenSetSlotDouble(vm, 0, pos->x);
+				};
+			}
+			else if(!isStatic && !strcmp(signature, "y")){
+				return [](WrenVM* vm){
+					RoomPosition* pos = static_cast<RoomPosition*>(wrenGetSlotForeign(vm, 0));
+					if(pos)
+						wrenSetSlotDouble(vm, 0, pos->y);
+				};
+			}
+		}
 		else if(strcmp(className, "Creep") == 0)
 		{
 			return Creep::wren_bind(vm, isStatic, signature);
@@ -757,6 +773,10 @@ int bind_wren(int argc, char *argv[])
 	"	static callMain() {\n"
 	"		if(!(__main is Null)) __main.call()\n"
 	"	}\n"
+	"}\n"
+	"foreign class RoomPosition{\n"
+	"	foreign x\n"
+	"	foreign y\n"
 	"}\n"
 	"foreign class Creep{\n"
 	"	foreign alive\n"

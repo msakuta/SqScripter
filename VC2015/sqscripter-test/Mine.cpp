@@ -56,46 +56,14 @@ void Mine::update(){
 	//		resource++;
 }
 
-static Mine *wrenGetMine(WrenVM* vm){
-	WeakPtr<Mine>* pp = (WeakPtr<Mine>*)wrenGetSlotForeign(vm, 0);
-	if(!pp)
-		return nullptr;
-	return *pp;
-}
-
 WrenForeignMethodFn Mine::wren_bind(WrenVM * vm, bool isStatic, const char * signature)
 {
-	if(!isStatic && !strcmp(signature, "alive")){
-		return [](WrenVM* vm){
-			Mine* mine = wrenGetMine(vm);
-			wrenSetSlotBool(vm, 0, mine != nullptr);
-		};
-	}
-	else if(!isStatic && !strcmp(signature, "pos")){
-		return [](WrenVM* vm){
-			Mine* mine = wrenGetMine(vm);
-			if(!mine)
-				return;
-			wrenEnsureSlots(vm, 2);
-			wrenSetSlotNewList(vm, 0);
-			wrenSetSlotDouble(vm, 1, mine->pos.x);
-			wrenInsertInList(vm, 0, -1, 1);
-			wrenSetSlotDouble(vm, 1, mine->pos.y);
-			wrenInsertInList(vm, 0, -1, 1);
-		};
-	}
-	else if(!isStatic && !strcmp(signature, "id")){
-		return [](WrenVM* vm){
-			Mine* mine = wrenGetMine(vm);
-			if(!mine)
-				return;
-			wrenEnsureSlots(vm, 1);
-			wrenSetSlotDouble(vm, 0, mine->id);
-		};
-	}
+	WrenForeignMethodFn ret = st::wren_bind(vm, isStatic, signature);
+	if(ret)
+		return ret;
 	else if(!isStatic && !strcmp(signature, "resource")){
 		return [](WrenVM* vm){
-			Mine* mine = wrenGetMine(vm);
+			Mine* mine = wrenGetWeakPtr<Mine>(vm);
 			if(!mine)
 				return;
 			wrenEnsureSlots(vm, 1);

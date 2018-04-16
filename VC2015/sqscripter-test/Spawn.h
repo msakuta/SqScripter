@@ -7,6 +7,7 @@
 
 struct Spawn : public RoomObject{
 	typedef Spawn tt;
+	typedef RoomObject st;
 
 	int owner;
 	int resource = 0;

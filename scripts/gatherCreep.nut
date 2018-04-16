@@ -10,7 +10,7 @@ local directions = [
 ]
 
 function main(){
-	local hasCreep = 0 < Game.creeps.len()
+	local hasCreep = 5 < Game.creeps.len()
 	if(!hasCreep){
 		foreach(s in Game.spawns){
 			local c = s.createCreep()
@@ -45,7 +45,15 @@ function main(){
 	foreach(c in Game.creeps){
 		if(c.resource < 100){
 			local mines = Game.mines
-			local m = c.memory == null || !c.memory.alive ? (c.memory = mines[rand() % mines.len()]) : c.memory
+			local m = (function(){
+				if((c.memory == null || !c.memory.alive) && mines.len())
+					c.memory = mines[rand() % mines.len()]
+				if(c.memory != null && !c.memory.alive)
+					c.memory = null
+				return c.memory
+			})()
+			if(m == null)
+				continue
 			local dist = distanceOf(c, m)
 			if(dist <= 1){
 				c.harvest(1)

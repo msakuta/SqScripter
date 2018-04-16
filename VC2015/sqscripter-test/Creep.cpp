@@ -367,46 +367,14 @@ void Creep::update()
 	ttl--;
 }
 
-static Creep *wrenGetCreep(WrenVM* vm){
-	WeakPtr<Creep>* pp = (WeakPtr<Creep>*)wrenGetSlotForeign(vm, 0);
-	if(!pp)
-		return nullptr;
-	return *pp;
-}
-
 WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * signature)
 {
-	if(!isStatic && !strcmp(signature, "alive")){
-		return [](WrenVM* vm){
-			Creep* creep = wrenGetCreep(vm);
-			wrenSetSlotBool(vm, 0, creep != nullptr);
-		};
-	}
-	else if(!isStatic && !strcmp(signature, "pos")){
-		return [](WrenVM* vm){
-			Creep* creep = wrenGetCreep(vm);
-			if(!creep)
-				return;
-			wrenEnsureSlots(vm, 2);
-			wrenSetSlotNewList(vm, 0);
-			wrenSetSlotDouble(vm, 1, creep->pos.x);
-			wrenInsertInList(vm, 0, -1, 1);
-			wrenSetSlotDouble(vm, 1, creep->pos.y);
-			wrenInsertInList(vm, 0, -1, 1);
-		};
-	}
-	else if(!isStatic && !strcmp(signature, "id")){
-		return [](WrenVM* vm){
-			Creep* creep = wrenGetCreep(vm);
-			if(!creep)
-				return;
-			wrenEnsureSlots(vm, 1);
-			wrenSetSlotDouble(vm, 0, creep->id);
-		};
-	}
+	WrenForeignMethodFn ret = st::wren_bind(vm, isStatic, signature);
+	if(ret)
+		return ret;
 	else if(!isStatic && !strcmp(signature, "owner")){
 		return [](WrenVM* vm){
-			Creep* creep = wrenGetCreep(vm);
+			Creep* creep = wrenGetWeakPtr<Creep>(vm);
 			if(!creep)
 				return;
 			wrenEnsureSlots(vm, 1);
@@ -415,7 +383,7 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 	}
 	else if(!isStatic && !strcmp(signature, "ttl")){
 		return [](WrenVM* vm){
-			Creep* creep = wrenGetCreep(vm);
+			Creep* creep = wrenGetWeakPtr<Creep>(vm);
 			if(!creep)
 				return;
 			wrenEnsureSlots(vm, 1);
@@ -424,7 +392,7 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 	}
 	else if(!isStatic && !strcmp(signature, "resource")){
 		return [](WrenVM* vm){
-			Creep* creep = wrenGetCreep(vm);
+			Creep* creep = wrenGetWeakPtr<Creep>(vm);
 			if(!creep)
 				return;
 			wrenEnsureSlots(vm, 1);
@@ -433,7 +401,7 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 	}
 	else if(!isStatic && !strcmp(signature, "memory")){
 		return [](WrenVM* vm){
-			Creep* creep = wrenGetCreep(vm);
+			Creep* creep = wrenGetWeakPtr<Creep>(vm);
 			if(!creep)
 				return;
 			wrenEnsureSlots(vm, 1);
@@ -445,7 +413,7 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 	}
 	else if(!isStatic && !strcmp(signature, "memory=(_)")){
 		return [](WrenVM* vm){
-			Creep* creep = wrenGetCreep(vm);
+			Creep* creep = wrenGetWeakPtr<Creep>(vm);
 			if(!creep)
 				return;
 			creep->whMemory = wrenGetSlotHandle(vm, 1);
@@ -454,7 +422,7 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 	else if(!isStatic && !strcmp(signature, "move(_)")){
 		return [](WrenVM* vm){
 			wxMutexLocker ml(wxGetApp().mutex);
-			Creep* creep = wrenGetCreep(vm);
+			Creep* creep = wrenGetWeakPtr<Creep>(vm);
 			if(!creep)
 				return;
 			if(WREN_TYPE_NUM != wrenGetSlotType(vm, 1)){
@@ -469,7 +437,7 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 	else if(!isStatic && !strcmp(signature, "harvest(_)")){
 		return [](WrenVM* vm){
 			wxMutexLocker ml(wxGetApp().mutex);
-			Creep* creep = wrenGetCreep(vm);
+			Creep* creep = wrenGetWeakPtr<Creep>(vm);
 			if(!creep)
 				return;
 			if(WREN_TYPE_NUM != wrenGetSlotType(vm, 1)){
@@ -484,7 +452,7 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 	else if(!isStatic && !strcmp(signature, "store(_)")){
 		return [](WrenVM* vm){
 			wxMutexLocker ml(wxGetApp().mutex);
-			Creep* creep = wrenGetCreep(vm);
+			Creep* creep = wrenGetWeakPtr<Creep>(vm);
 			if(!creep)
 				return;
 			if(WREN_TYPE_NUM != wrenGetSlotType(vm, 1)){
@@ -500,25 +468,21 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 		return [](WrenVM* vm){
 			wxMutexLocker ml(wxGetApp().mutex);
 			wrenEnsureSlots(vm, 4);
-			Creep* creep = wrenGetCreep(vm);
+			Creep* creep = wrenGetWeakPtr<Creep>(vm);
 			if(!creep)
 				return;
-			if(WREN_TYPE_LIST != wrenGetSlotType(vm, 1)){
+			if(WREN_TYPE_FOREIGN != wrenGetSlotType(vm, 1)){
 				return;
 			}
-			wrenGetListElement(vm, 1, 0, 2);
-			int x = (int)wrenGetSlotDouble(vm, 2);
-			wrenGetListElement(vm, 1, 1, 3);
-			int y = (int)wrenGetSlotDouble(vm, 3);
-			RoomPosition pos(x, y);
-			bool ret = creep->findPath(pos);
+			RoomPosition* pos = static_cast<RoomPosition*>(wrenGetSlotForeign(vm, 1));
+			bool ret = creep->findPath(*pos);
 			wrenSetSlotBool(vm, 0, ret);
 		};
 	}
 	else if(!isStatic && !strcmp(signature, "followPath()")){
 		return [](WrenVM* vm){
 			wxMutexLocker ml(wxGetApp().mutex);
-			Creep* creep = wrenGetCreep(vm);
+			Creep* creep = wrenGetWeakPtr<Creep>(vm);
 			if(!creep)
 				return;
 			wrenSetSlotBool(vm, 0, creep->followPath());

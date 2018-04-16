@@ -36,3 +36,40 @@ RoomObject::~RoomObject(){
 	if(this == game.selected)
 		game.selected = nullptr;
 }
+
+WrenForeignMethodFn RoomObject::wren_bind(WrenVM * vm, bool isStatic, const char * signature)
+{
+	if(!isStatic && !strcmp(signature, "alive")){
+		return [](WrenVM* vm){
+			RoomObject* obj = wrenGetWeakPtr<RoomObject>(vm);
+			wrenSetSlotBool(vm, 0, obj != nullptr);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "pos")){
+		return [](WrenVM* vm){
+			RoomObject* obj = wrenGetWeakPtr<RoomObject>(vm);
+			if(!obj)
+				return;
+			wrenEnsureSlots(vm, 2);
+			wrenGetVariable(vm, "main", "RoomPosition", 1);
+			RoomPosition *ppos = (RoomPosition*)wrenSetSlotNewForeign(vm, 0, 1, sizeof(RoomPosition));
+			if(ppos)
+				*ppos = obj->pos;
+			/*			wrenSetSlotNewList(vm, 0);
+			wrenSetSlotDouble(vm, 1, creep->pos.x);
+			wrenInsertInList(vm, 0, -1, 1);
+			wrenSetSlotDouble(vm, 1, creep->pos.y);
+			wrenInsertInList(vm, 0, -1, 1);*/
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "id")){
+		return [](WrenVM* vm){
+			RoomObject* obj = wrenGetWeakPtr<RoomObject>(vm);
+			if(!obj)
+				return;
+			wrenEnsureSlots(vm, 1);
+			wrenSetSlotDouble(vm, 0, obj->id);
+		};
+	}
+	return nullptr;
+}

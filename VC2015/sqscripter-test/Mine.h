@@ -7,6 +7,7 @@
 
 struct Mine : public RoomObject{
 	typedef Mine tt;
+	typedef RoomObject st;
 
 	int resource = max_resource;
 	static const int max_resource = 500;

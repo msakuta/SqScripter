@@ -35,6 +35,8 @@ struct PathNode{
 typedef std::vector<PathNode> Path;
 
 struct Creep : public RoomObject{
+	typedef RoomObject st;
+
 	Path path;
 	int owner;
 	int ttl = max_ttl; // Time to Live

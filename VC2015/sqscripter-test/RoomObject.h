@@ -37,7 +37,17 @@ struct RoomObject : public Observable{
 	virtual ~RoomObject();
 
 	virtual const char *className()const{ return "RoomObject"; }
+
+	static WrenForeignMethodFn wren_bind(WrenVM* vm, bool isStatic, const char* signature);
 };
+
+template<typename T>
+inline T *wrenGetWeakPtr(WrenVM* vm){
+	WeakPtr<T>* pp = (WeakPtr<T>*)wrenGetSlotForeign(vm, 0);
+	if(!pp)
+		return nullptr;
+	return *pp;
+}
 
 
 #endif

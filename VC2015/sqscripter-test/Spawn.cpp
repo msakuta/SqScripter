@@ -94,46 +94,14 @@ SQInteger Spawn::sqf_get(HSQUIRRELVM v){
 		return sq_throwerror(v, _SC("Couldn't find key"));
 }
 
-static Spawn *wrenGetSpawn(WrenVM* vm){
-	WeakPtr<Spawn>* pp = (WeakPtr<Spawn>*)wrenGetSlotForeign(vm, 0);
-	if(!pp)
-		return nullptr;
-	return *pp;
-}
-
 WrenForeignMethodFn Spawn::wren_bind(WrenVM * vm, bool isStatic, const char * signature)
 {
-	if(!isStatic && !strcmp(signature, "alive")){
-		return [](WrenVM* vm){
-			Spawn* spawn = wrenGetSpawn(vm);
-			wrenSetSlotBool(vm, 0, spawn != nullptr);
-		};
-	}
-	else if(!isStatic && !strcmp(signature, "pos")){
-		return [](WrenVM* vm){
-			Spawn* spawn = wrenGetSpawn(vm);
-			if(!spawn)
-				return;
-			wrenEnsureSlots(vm, 2);
-			wrenSetSlotNewList(vm, 0);
-			wrenSetSlotDouble(vm, 1, spawn->pos.x);
-			wrenInsertInList(vm, 0, -1, 1);
-			wrenSetSlotDouble(vm, 1, spawn->pos.y);
-			wrenInsertInList(vm, 0, -1, 1);
-		};
-	}
-	else if(!isStatic && !strcmp(signature, "id")){
-		return [](WrenVM* vm){
-			Spawn* spawn = wrenGetSpawn(vm);
-			if(!spawn)
-				return;
-			wrenEnsureSlots(vm, 1);
-			wrenSetSlotDouble(vm, 0, spawn->id);
-		};
-	}
+	WrenForeignMethodFn ret = st::wren_bind(vm, isStatic, signature);
+	if(ret)
+		return ret;
 	else if(!isStatic && !strcmp(signature, "owner")){
 		return [](WrenVM* vm){
-			Spawn* spawn = wrenGetSpawn(vm);
+			Spawn* spawn = wrenGetWeakPtr<Spawn>(vm);
 			if(!spawn)
 				return;
 			wrenEnsureSlots(vm, 1);
@@ -142,7 +110,7 @@ WrenForeignMethodFn Spawn::wren_bind(WrenVM * vm, bool isStatic, const char * si
 	}
 	else if(!isStatic && !strcmp(signature, "resource")){
 		return [](WrenVM* vm){
-			Spawn* spawn = wrenGetSpawn(vm);
+			Spawn* spawn = wrenGetWeakPtr<Spawn>(vm);
 			if(!spawn)
 				return;
 			wrenEnsureSlots(vm, 1);
@@ -152,7 +120,7 @@ WrenForeignMethodFn Spawn::wren_bind(WrenVM * vm, bool isStatic, const char * si
 	else if(!isStatic && !strcmp(signature, "createCreep()")){
 		return [](WrenVM* vm){
 			wxMutexLocker ml(wxGetApp().mutex);
-			Spawn* spawn = wrenGetSpawn(vm);
+			Spawn* spawn = wrenGetWeakPtr<Spawn>(vm);
 			if(!spawn)
 				return;
 			wrenSetSlotBool(vm, 0, spawn->createCreep());
