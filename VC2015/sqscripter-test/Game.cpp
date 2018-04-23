@@ -58,12 +58,87 @@ bool Game::isBlocked(const RoomPosition & pos)const
 	return false;
 }
 
+/// Fill cost field of room tiles from a given position.
+/// Essentially the same algorithm with findPath() except that it doesn't have the "to" parameter.
+/// If there are unreachable tiles in the room, they will be painted with INT_MAX.
+/// Used for filling unreachable tiles with walls, since randomly generated objects may happen to be
+/// located on these tiles.
+static void paintReachable(const RoomPosition& from, const RoomObject* self){
+	// List of positions to start calculating cost.
+	// Using std::vector to cache the next candidates is surprisingly efficient,
+	// because the number of target positions in one iteration is orders of magnitude smaller than the total number of tiles.
+	// Also surprisingly, we don't need std::set to exclude duplicates, because the same candidate is already marked solved by assigning
+	// non-infinity cost.  If we used std::set, it would take cost in performance to build hash table.
+	std::vector<RoomPosition> targetList[2];
+	auto currentTargets = &targetList[0];
+	auto nextTargets = &targetList[1];
+
+	auto internal = [self, &currentTargets, &nextTargets](){
+		int changes = 0;
+		for(auto& it : *currentTargets){
+			int x = it.x;
+			int y = it.y;
+			Tile &tile = game.room[y][x];
+			if(tile.cost == INT_MAX)
+				continue;
+			for(int y1 = std::max(y - 1, 0); y1 <= std::min(y + 1, ROOMSIZE - 1); y1++){
+				for(int x1 = std::max(x - 1, 0); x1 <= std::min(x + 1, ROOMSIZE - 1); x1++){
+					Tile &tile1 = game.room[y1][x1];
+
+					// Check if the path is blocked by another creep.
+					if(tile1.object != 0 && self && tile1.object != self->id)
+						continue;
+
+					if(tile1.type == 0 && tile.cost + 1 < tile1.cost){
+						tile1.cost = tile.cost + 1;
+						nextTargets->push_back(RoomPosition(x1, y1));
+						changes++;
+					}
+				}
+			}
+		}
+		return changes;
+	};
+
+	currentTargets->push_back(from);
+
+	for(int y = 0; y < ROOMSIZE; y++){
+		for(int x = 0; x < ROOMSIZE; x++){
+			Tile &tile = game.room[y][x];
+			tile.cost = (x == from.x && y == from.y ? 0 : INT_MAX);
+		}
+	}
+
+	std::vector<PathNode> ret;
+
+	while(internal()){
+		// Swap the buffers for the next iteration.
+		// std::vector::clear() keeps the reserved buffer, which is very efficient to reuse.
+		currentTargets->clear();
+		std::swap(currentTargets, nextTargets);
+	}
+}
+
+
 void Game::init(){
 	for(int i = 0; i < ROOMSIZE; i++){
 		int di = i - ROOMSIZE / 2;
 		for(size_t j = 0; j < ROOMSIZE; j++){
 			int dj = j - ROOMSIZE / 2;
 			room[i][j].type = perlin_noise_pixel(j, i, 3) < 1. - 1. / (1. + sqrt(di * di + dj * dj) / (ROOMSIZE / 2));
+		}
+	}
+
+	paintReachable(RoomPosition(ROOMSIZE / 2, ROOMSIZE / 2), nullptr);
+
+	// Paint unreachable tiles from the center of the room black.
+	// It could be anywhere, but walkable tiles must be singly connected.
+	for(int i = 0; i < ROOMSIZE; i++){
+		int di = i - ROOMSIZE / 2;
+		for(size_t j = 0; j < ROOMSIZE; j++){
+			int dj = j - ROOMSIZE / 2;
+			if(room[i][j].type != 1 && room[i][j].cost == INT_MAX)
+				room[i][j].type = 1;
 		}
 	}
 

@@ -15,9 +15,9 @@ const SQUserPointer Creep::typetag = _SC("Creep");
 
 std::vector<PathNode> findPath(const RoomPosition& from, const RoomPosition& to, const RoomObject& self){
 	// List of positions to start calculating cost.
-	// Using std::vector to cache the next candidates is surprizingly efficient,
+	// Using std::vector to cache the next candidates is surprisingly efficient,
 	// because the number of target positions in one iteration is orders of magnitude smaller than the total number of tiles.
-	// Also surprizingly, we don't need std::set to exclude duplicates, because the same candidate is already marked solved by assigning
+	// Also surprisingly, we don't need std::set to exclude duplicates, because the same candidate is already marked solved by assigning
 	// non-infinity cost.  If we used std::set, it would take cost in performance to build hash table.
 	std::vector<RoomPosition> targetList[2];
 	auto currentTargets = &targetList[0];
