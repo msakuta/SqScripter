@@ -85,13 +85,18 @@ SQInteger Spawn::sqf_get(HSQUIRRELVM v){
 		sq_pushinteger(v, spawn->id);
 		return 1;
 	}
+	else if(!scstrcmp(key, _SC("owner"))){
+		sq_pushroottable(v);
+		sq_pushinteger(v, spawn->owner);
+		return 1;
+	}
 	else if(!scstrcmp(key, _SC("resource"))){
 		sq_pushroottable(v);
 		sq_pushinteger(v, spawn->resource);
 		return 1;
 	}
 	else
-		return sq_throwerror(v, _SC("Couldn't find key"));
+		return sq_throwerror(v, (std::basic_string<SQChar>(_SC("Couldn't find key: ")) + std::basic_string<SQChar>(key)).c_str());
 }
 
 WrenForeignMethodFn Spawn::wren_bind(WrenVM * vm, bool isStatic, const char * signature)
