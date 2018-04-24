@@ -43,3 +43,7 @@ All the fields are static; you can call them like ``Game.time`` at any point in 
 .. js:attribute:: Game.mines
 
    Returns a list of all :doc:`Mines <Mine>` in the game.
+
+.. js:attribute:: Game.races
+
+   Returns a list of all :doc:`Races <Race>` in the game.

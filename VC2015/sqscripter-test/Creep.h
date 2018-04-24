@@ -40,8 +40,10 @@ struct Creep : public RoomObject{
 	Path path;
 	int owner;
 	int ttl = max_ttl; // Time to Live
+	int health = max_health; // Hit points of this Creep
 	int resource = 0; // Resource cargo
 	static const int max_ttl = 1000;
+	static const int max_health = 100;
 	static const int max_resource = 100;
 
 	static const SQUserPointer typetag;
@@ -52,6 +54,7 @@ struct Creep : public RoomObject{
 	bool move(int dx, int dy);
 	bool harvest(int direction);
 	bool store(int direction);
+	bool attack(int direction);
 	bool findPath(const RoomPosition& pos);
 	bool followPath();
 	void update();

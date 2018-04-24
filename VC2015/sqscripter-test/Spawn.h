@@ -11,7 +11,7 @@ struct Spawn : public RoomObject{
 
 	int owner;
 	int resource = 0;
-	static const int max_resource = 1000;
+	static const int max_resource = 10000;
 	static const int max_gen_resource = 100;
 	static const int creep_cost = 20;
 

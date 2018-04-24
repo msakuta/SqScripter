@@ -159,7 +159,9 @@ MainFrame::~MainFrame()
 void MainFrame::update(){
 	wxStaticText *stc = static_cast<wxStaticText*>(GetWindowChild(ID_TIME));
 	if(stc){
-		wxString str = "Time: " + wxString::Format("%d", game.global_time);
+		wxString str = "Time: " + wxString::Format("%d", game.global_time) + "\n" +
+			wxString::Format("  Race 0: kills: %d, deaths: %d\n", game.races[0].kills, game.races[0].deaths) +
+			wxString::Format("  Race 1: kills: %d, deaths: %d\n", game.races[1].kills, game.races[1].deaths);
 		stc->SetLabelText(str);
 	}
 
@@ -178,7 +180,7 @@ void MainFrame::update(){
 
 		if(stc = static_cast<wxStaticText*>(GetWindowChild(ID_SELECT_RESOURCE))){
 			if(Creep* creep = dynamic_cast<Creep*>(selected)){
-				stc->SetLabelText(wxString::Format("Resource: %d, Time to Live: %d", creep->resource, creep->ttl));
+				stc->SetLabelText(wxString::Format("Resource: %d / %d\nTime to Live: %d\nHealth: %d / %d", creep->resource, creep->max_resource, creep->ttl, creep->health, creep->max_health));
 			}
 			else if(Spawn* spawn = dynamic_cast<Spawn*>(selected)){
 				stc->SetLabelText(wxString::Format("Resource: %d", spawn->resource));
@@ -430,7 +432,7 @@ bool MyApp::OnInit()
 	wxStaticText *gameTitle = new wxStaticText(gamePanel, -1, "Game World", wxPoint(20, 30));
 	gameTitle->SetFont(titleFont);
 	gameTitle->SetBackgroundColour(wxColour(63,63,63));
-	new wxStaticText(gamePanel, ID_TIME, "", wxPoint(20, 60));
+	new wxStaticText(gamePanel, ID_TIME, "", wxPoint(20, 60), wxSize(rightPanelWidth, 60));
 
 	wxPanel *selectionPanel = new wxPanel(rightPanel, -1);
 	selectionPanel->SetForegroundColour(wxColour(255,255,255));
@@ -438,7 +440,7 @@ bool MyApp::OnInit()
 	selectName->SetFont(titleFont);
 	selectName->SetBackgroundColour(wxColour(63,63,63));
 	new wxStaticText(selectionPanel, ID_SELECT_POS, "", wxPoint(20, 60));
-	new wxStaticText(selectionPanel, ID_SELECT_RESOURCE, "", wxPoint(20, 80));
+	new wxStaticText(selectionPanel, ID_SELECT_RESOURCE, "", wxPoint(20, 80), wxSize(rightPanelWidth, 300));
 
 	wxBoxSizer *rightSizer = new wxBoxSizer(wxVERTICAL);
 	rightSizer->Add(roomPanel, 0, wxEXPAND);
@@ -601,17 +603,8 @@ int nonmain(int argc, char *argv[])
 	sqstd_register_mathlib(sqvm);
 	sqstd_register_stringlib(sqvm);
 	sqstd_register_systemlib(sqvm);
-	sq_pushstring(sqvm, _SC("Game"), -1);
-		sq_newclass(sqvm, SQFalse);
-		sq_settypetag(sqvm, -1, "Game");
-		sq_pushstring(sqvm, _SC("_get"), -1);
-		sq_newclosure(sqvm, &Game::sqf_get, 0);
-		sq_newslot(sqvm, -3, SQTrue);
-	// Register the singleton instance instead of the class
-	// because _get() method only works for instances.
-	sq_createinstance(sqvm, -1);
-	sq_remove(sqvm, -2);
-	sq_newslot(sqvm, -3, SQFalse);
+
+	Game::sq_define(sqvm);
 
 	Creep::sq_define(sqvm);
 
@@ -677,6 +670,29 @@ static WrenForeignMethodFn bindForeignMethod(
 		if(strcmp(className, "Game") == 0)
 		{
 			return Game::wren_bind(vm, isStatic, signature);
+		}
+		else if(strcmp(className, "Race") == 0){
+			if(!isStatic && !strcmp(signature, "id")){
+				return [](WrenVM* vm){
+					Game::Race* race = static_cast<Game::Race*>(wrenGetSlotForeign(vm, 0));
+					if(race)
+						wrenSetSlotDouble(vm, 0, race->id);
+				};
+			}
+			else if(!isStatic && !strcmp(signature, "kills")){
+				return [](WrenVM* vm){
+					Game::Race* race = static_cast<Game::Race*>(wrenGetSlotForeign(vm, 0));
+					if(race)
+						wrenSetSlotDouble(vm, 0, race->kills);
+				};
+			}
+			else if(!isStatic && !strcmp(signature, "deaths")){
+				return [](WrenVM* vm){
+					Game::Race* race = static_cast<Game::Race*>(wrenGetSlotForeign(vm, 0));
+					if(race)
+						wrenSetSlotDouble(vm, 0, race->deaths);
+				};
+			}
 		}
 		else if(strcmp(className, "RoomPosition") == 0){
 			if(!isStatic && !strcmp(signature, "x")){
@@ -761,6 +777,11 @@ int bind_wren(int argc, char *argv[])
 	wren = wrenNewVM(&config);
 
 	wrenInterpret(wren, ""
+	"foreign class Race{\n"
+	"	foreign id\n"
+	"	foreign kills\n"
+	"	foreign deaths\n"
+	"}\n"
 	"class Game{\n"
 	"	foreign static print(s)\n"
 	"	foreign static time\n"
@@ -768,6 +789,7 @@ int bind_wren(int argc, char *argv[])
 	"	foreign static creeps\n"
 	"	foreign static spawns\n"
 	"	foreign static mines\n"
+	"	foreign static races\n"
 	"	static main { __main }\n"
 	"	static main=(value) { __main = value }\n"
 	"	static callMain() {\n"
@@ -784,6 +806,7 @@ int bind_wren(int argc, char *argv[])
 	"	foreign move(i)\n"
 	"	foreign harvest(i)\n"
 	"	foreign store(i)\n"
+	"	foreign attack(i)\n"
 	"	foreign findPath(pos)\n"
 	"	foreign followPath()\n"
 	"	foreign id\n"

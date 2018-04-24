@@ -18,6 +18,7 @@ no distinction between them.
    :maxdepth: 2
 
    Game.rst
+   Race
    RoomPosition.rst
    Creep
    Spawn

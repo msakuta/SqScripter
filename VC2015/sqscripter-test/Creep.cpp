@@ -18,7 +18,7 @@ std::vector<PathNode> findPath(const RoomPosition& from, const RoomPosition& to,
 	// Using std::vector to cache the next candidates is surprisingly efficient,
 	// because the number of target positions in one iteration is orders of magnitude smaller than the total number of tiles.
 	// Also surprisingly, we don't need std::set to exclude duplicates, because the same candidate is already marked solved by assigning
-	// non-infinity cost.  If we used std::set, it would take cost in performance to build hash table.
+	// non-infinity cost.  If we used std::set, it would take cost in performance to build a hash table (or a binary tree or whatever).
 	std::vector<RoomPosition> targetList[2];
 	auto currentTargets = &targetList[0];
 	auto nextTargets = &targetList[1];
@@ -125,6 +125,20 @@ void Creep::sq_define(HSQUIRRELVM sqvm){
 	sq_newslot(sqvm, -3, SQFalse);
 	sq_pushstring(sqvm, _SC("store"), -1);
 	sq_newclosure(sqvm, &Creep::sqf_store, 0);
+	sq_newslot(sqvm, -3, SQFalse);
+	sq_pushstring(sqvm, _SC("attack"), -1);
+	sq_newclosure(sqvm, [](HSQUIRRELVM v){
+		wxMutexLocker ml(wxGetApp().mutex);
+		SQUserPointer p;
+		Creep *creep;
+		if(SQ_FAILED(sq_getinstanceup(v, 1, &p, typetag)) || !(creep = *(WeakPtr<Creep>*)p))
+			return sq_throwerror(v, _SC("Broken Creep instance"));
+		SQInteger i = 1;
+		if(SQ_FAILED(sq_getinteger(v, 2, &i)))
+			i = 1; // Don't make an omitted parameter an error.
+		sq_pushbool(v, creep->attack(i));
+		return SQInteger(1);
+	}, 0);
 	sq_newslot(sqvm, -3, SQFalse);
 	sq_pushstring(sqvm, _SC("findPath"), -1);
 	sq_newclosure(sqvm, [](HSQUIRRELVM v){
@@ -340,6 +354,27 @@ bool Creep::store(int direction)
 	return false;
 }
 
+bool Creep::attack(int direction)
+{
+	for(auto& creep : game.creeps){
+		int dist = std::max(std::abs(creep.pos.x - pos.x), std::abs(creep.pos.y - pos.y));
+		// Find an enemy
+		if(dist <= 1 && 0 < resource && 0 < creep.health && owner != creep.owner){
+			int damage_amount = resource;
+			if(creep.health < damage_amount)
+				damage_amount = creep.health;
+			if(0 < creep.health && creep.health - damage_amount <= 0){
+				game.races[owner].kills++;
+				game.races[creep.owner].deaths++;
+			}
+			resource -= damage_amount;
+			creep.health -= damage_amount;
+			return true;
+		}
+	}
+	return false;
+}
+
 bool Creep::findPath(const RoomPosition& dest){
 	auto ret = ::findPath(this->pos, dest, *this);
 	if(ret.size()){
@@ -460,6 +495,21 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 			}
 			int i = (int)wrenGetSlotDouble(vm, 1);
 			bool ret = creep->store(i);
+			wrenEnsureSlots(vm, 1);
+			wrenSetSlotBool(vm, 0, ret);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "attack(_)")){
+		return [](WrenVM* vm){
+			wxMutexLocker ml(wxGetApp().mutex);
+			Creep* creep = wrenGetWeakPtr<Creep>(vm);
+			if(!creep)
+				return;
+			if(WREN_TYPE_NUM != wrenGetSlotType(vm, 1)){
+				return;
+			}
+			int i = (int)wrenGetSlotDouble(vm, 1);
+			bool ret = creep->attack(i);
 			wrenEnsureSlots(vm, 1);
 			wrenSetSlotBool(vm, 0, ret);
 		};

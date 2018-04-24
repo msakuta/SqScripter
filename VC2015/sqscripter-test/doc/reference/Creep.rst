@@ -85,6 +85,13 @@ You can check the remaining live of a Creep by retrieving ``ttl`` field.
 
    Order this Creep to store havested resources into adjacent Spawn.
 
+.. js:function:: Creep.attack(direction)
+
+   :param direction: Ignored.
+
+   Order this Creep to attack an enemy Creep at an adjacent tile.
+   Attacking costs resources, so the Creep needs to have at least some resources to perfom attacking.
+
 .. js:function:: Creep.findPath(to)
 
    :param RoomPosition to: the destination to search path to.

@@ -5,6 +5,8 @@ extern "C"{
 #include "clib/rseq.h"
 }
 
+const SQUserPointer Game::Race::typetag = _SC("Race");
+int Game::Race::id_gen = 0;
 
 Game game;
 
@@ -208,7 +210,7 @@ void Game::update(){
 	for(auto it = creeps.begin(); it != creeps.end();){
 		auto next = it;
 		++next;
-		if(it->ttl <= 0){
+		if(it->ttl <= 0 || it->health <= 0){
 			room[it->pos.y][it->pos.x].object = 0;
 			creeps.erase(it);
 		}
@@ -233,7 +235,7 @@ void Game::update(){
 	}
 
 	// Create a random mine every 100 frames
-	if((double)rand() / RAND_MAX < 0.01 && mines.size() < 3){
+	if((double)rand() / RAND_MAX < 0.03 && mines.size() < 3){
 		int x, y, tries = 0;
 		static const int max_tries = 100;
 		do{
@@ -245,6 +247,55 @@ void Game::update(){
 			room[y][x].object = mines.back().id;
 		}
 	}
+}
+
+void Game::sq_define(HSQUIRRELVM sqvm){
+	sq_pushstring(sqvm, _SC("Race"), -1);
+	sq_newclass(sqvm, SQFalse);
+	sq_settypetag(sqvm, -1, Race::typetag);
+	sq_setclassudsize(sqvm, -1, sizeof(Race));
+	sq_pushstring(sqvm, _SC("_get"), -1);
+	sq_newclosure(sqvm, [](HSQUIRRELVM v){
+		wxMutexLocker ml(wxGetApp().mutex);
+		SQUserPointer p;
+		Race *race;
+		if(SQ_FAILED(sq_getinstanceup(v, 1, &p, Race::typetag)) || !(race = static_cast<Race*>(p)))
+			return sq_throwerror(v, _SC("Broken Creep instance"));
+		const SQChar *key;
+		if(SQ_FAILED(sq_getstring(v, -1, &key)))
+			return sq_throwerror(v, _SC("get key is missing"));
+		if(!scstrcmp(key, _SC("id"))){
+			sq_pushinteger(v, race->id);
+			return SQInteger(1);
+		}
+		else if(!scstrcmp(key, _SC("id"))){
+			sq_pushinteger(v, race->id);
+			return SQInteger(1);
+		}
+		else if(!scstrcmp(key, _SC("kills"))){
+			sq_pushinteger(v, race->kills);
+			return SQInteger(1);
+		}
+		else if(!scstrcmp(key, _SC("deaths"))){
+			sq_pushinteger(v, race->deaths);
+			return SQInteger(1);
+		}
+		return SQInteger(1);
+	}, 0);
+	sq_newslot(sqvm, -3, SQFalse);
+	sq_newslot(sqvm, -3, SQFalse);
+
+	sq_pushstring(sqvm, _SC("Game"), -1);
+	sq_newclass(sqvm, SQFalse);
+	sq_settypetag(sqvm, -1, "Game");
+	sq_pushstring(sqvm, _SC("_get"), -1);
+	sq_newclosure(sqvm, &Game::sqf_get, 0);
+	sq_newslot(sqvm, -3, SQTrue);
+	// Register the singleton instance instead of the class
+	// because _get() method only works for instances.
+	sq_createinstance(sqvm, -1);
+	sq_remove(sqvm, -2);
+	sq_newslot(sqvm, -3, SQFalse);
 }
 
 SQInteger Game::sqf_get(HSQUIRRELVM v){
@@ -321,6 +372,29 @@ SQInteger Game::sqf_get(HSQUIRRELVM v){
 			});
 			if(SQ_FAILED(sq_set(v, -4))) // array Mine
 				return sq_throwerror(v, _SC("Failed to create creeps array"));
+			sq_pop(v, 1); // array
+		}
+		return 1;
+	}
+	else if(!scstrcmp(key, _SC("races"))){
+		size_t sz = sizeof(game.races) / sizeof(*game.races);
+		SQInteger i = 0;
+		sq_newarray(v, sz); // array
+		for(auto& it : game.races){
+			sq_pushroottable(v); // array root
+			sq_pushstring(v, _SC("Race"), -1); // array root "Race"
+			if(SQ_FAILED(sq_get(v, -2))) // array root Race
+				return sq_throwerror(v, _SC("Failed to find Race class"));
+			//sq_pushobject(v, Mine::mineClass); // array Mine
+			sq_remove(v, -2); // array Race
+			sq_pushinteger(v, i++); // array Race i
+			sq_createinstance(v, -2); // array Race i inst
+			SQUserPointer up;
+			if(SQ_FAILED(sq_getinstanceup(v, -1, &up, Race::typetag))) // array Race i inst
+				return sq_throwerror(v, _SC("Failed to create Race instance"));
+			Race* race = new(up) Race(it);
+			if(SQ_FAILED(sq_set(v, -4))) // array Race
+				return sq_throwerror(v, _SC("Failed to create races array"));
 			sq_pop(v, 1); // array
 		}
 		return 1;
@@ -409,6 +483,19 @@ WrenForeignMethodFn Game::wren_bind(WrenVM * vm, bool isStatic, const char * sig
 			for(auto& it : game.mines){
 				void *pp = wrenSetSlotNewForeign(vm, 2, 1, sizeof(WeakPtr<Mine>));
 				new(pp) WeakPtr<Mine>(&it);
+				wrenInsertInList(vm, 0, -1, 2);
+			}
+		};
+	}
+	else if(isStatic && strcmp(signature, "races") == 0){
+		return [](WrenVM* vm){
+			// Slots: [array] main.Creep [instance]
+			wrenEnsureSlots(vm, 3);
+			wrenSetSlotNewList(vm, 0);
+			wrenGetVariable(vm, "main", "Race", 1);
+			for(auto& it : game.races){
+				void *pp = wrenSetSlotNewForeign(vm, 2, 1, sizeof(Race));
+				new(pp) Race(it);
 				wrenInsertInList(vm, 0, -1, 2);
 			}
 		};
