@@ -4,7 +4,7 @@ Creep
 A moving unit on a room.
 A Creep is created from a :doc:`Spawn`.
 A Creep has maximum time to live. Any Creep will die after certain amount of time.
-You can check the remaining live of a Creep by retrieving ``ttl`` field.
+You can check the remaining time to live of a Creep by retrieving ``ttl`` field.
 
 .. js:attribute:: Creep.alive
 
@@ -21,6 +21,7 @@ You can check the remaining live of a Creep by retrieving ``ttl`` field.
 .. js:attribute:: Creep.owner
 
    A number indicating the ID of the owner.
+   This is an index to :js:attr:`Game.races` array.
 
 .. js:attribute:: Creep.ttl
 
@@ -30,11 +31,15 @@ You can check the remaining live of a Creep by retrieving ``ttl`` field.
 
    How much resource this Creep is carrying. Read only.
 
+.. js:attribute:: Creep.moveParts
+
+   The number of move parts this Creep has. Read only.
+
 .. js:attribute:: Creep.memory
 
    A special field that can contain arbitrary data in the scripts.
    You can set any type of data into this field and read it back later at any time.
-   The stored object is not freed even a tick is elapsed.
+   The stored object is not freed even after a tick is elapsed.
 
    Example in Squirrel:
 
@@ -44,8 +49,8 @@ You can check the remaining live of a Creep by retrieving ``ttl`` field.
        
        print(Game.creeps[0].memory) // prints "Hello"
 
-   Please note that it's not necessarily true for RoomObjects.
-   Those objects who has ``alive`` property can become dead between ticks.
+   Please note that, as described in :doc:`Weak Reference <../index>`, references to other RoomObjects in this memory can become invalid
+   when a tick elapses.
    You should check if the object is alive before accessing its contents like below.
 
    .. code-block:: JavaScript
@@ -73,6 +78,10 @@ You can check the remaining live of a Creep by retrieving ``ttl`` field.
       { -1,0 }, // LEFT = 7,
       { -1,-1 }, // TOP_LEFT = 8,
 
+   However, it is generally very difficult to determine which direction you shold step to in order to approach your final destination,
+   because there can be obstacles in complex forms, possibly changing over time.
+   For this purpose, C++-natively optimized :js:func:`Creep.findPath` and :js:func:`Creep.followPath` can be used.
+
 .. js:function:: Creep.harvest(direction)
 
    :param direction: Ignored.
@@ -96,11 +105,20 @@ You can check the remaining live of a Creep by retrieving ``ttl`` field.
 
    :param RoomPosition to: the destination to search path to.
 
-   Search the path to the destination and stores it into internal buffer of this Creep.
+   Search the path to the destination using A* path finding algorithm and stores it into internal buffer of this Creep.
    Returns ``true`` if the path was found, ``false`` otherwise.
+   You can subsequently call :js:func:`Creep.followPath` to move one step towards the destination.
+
+   Note that path finding can be expensive in terms of CPU load, so you may want to call it only once in a while.
+   However, you will need to call it periodically because the situation (location of other RoomObjects) can change over time
+   and the Creep may need to adapt to the new situation.
 
 .. js:function:: Creep.followPath()
 
    Move this Creep so that it follows the last searched path with :js:func:`Creep.findPath`.
+   Returns ``true`` if the next move is not blocked.
+
+   If ``true`` is returned, it also pops the last element of internal path array, which means calling this function periodically
+   will eventually bring this Creep to the destination, given that the path is not blocked by another moving object.
 
 

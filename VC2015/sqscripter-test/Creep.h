@@ -42,13 +42,16 @@ struct Creep : public RoomObject{
 	int ttl = max_ttl; // Time to Live
 	int health = max_health; // Hit points of this Creep
 	int resource = 0; // Resource cargo
+	int fatigue = 0;
+	int moveParts = 1;
 	static const int max_ttl = 1000;
 	static const int max_health = 100;
 	static const int max_resource = 100;
+	static const int max_parts = 20;
 
 	static const SQUserPointer typetag;
 
-	Creep(int x, int y, int owner);
+	Creep(int x, int y, int owner, int moveParts);
 	const char *className()const override{ return "Creep"; }
 	bool move(int direction);
 	bool move(int dx, int dy);

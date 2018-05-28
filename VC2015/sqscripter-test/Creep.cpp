@@ -110,7 +110,11 @@ std::vector<PathNode> findPath(const RoomPosition& from, const RoomPosition& to,
 }
 
 
-Creep::Creep(int x, int y, int owner) : RoomObject(x, y), owner(owner){}
+Creep::Creep(int x, int y, int owner, int moveParts) :
+	RoomObject(x, y),
+	owner(owner),
+	moveParts(moveParts)
+{}
 
 void Creep::sq_define(HSQUIRRELVM sqvm){
 	sq_pushstring(sqvm, _SC("Creep"), -1);
@@ -247,6 +251,11 @@ SQInteger Creep::sqf_get(HSQUIRRELVM v){
 		sq_pushinteger(v, creep->resource);
 		return 1;
 	}
+	else if(!scstrcmp(key, _SC("moveParts"))){
+		sq_pushroottable(v);
+		sq_pushinteger(v, creep->moveParts);
+		return 1;
+	}
 	else
 		return sq_throwerror(v, _SC("Couldn't find key"));
 }
@@ -307,6 +316,17 @@ bool Creep::move(int direction){
 }
 
 bool Creep::move(int dx, int dy){
+	if(0 < fatigue){
+		fatigue = std::max(fatigue - moveParts, 0);
+		return false;
+	}
+
+	// Calculate amount of fatigue by carrying resource weight.
+	int workCost = 1;
+	int bit = 0;
+	while((1 << bit) < resource) bit++;
+	fatigue += bit;
+
 	RoomPosition newPos = pos;
 	newPos.x += dx;
 	newPos.y += dy;
@@ -432,6 +452,15 @@ WrenForeignMethodFn Creep::wren_bind(WrenVM * vm, bool isStatic, const char * si
 				return;
 			wrenEnsureSlots(vm, 1);
 			wrenSetSlotDouble(vm, 0, creep->resource);
+		};
+	}
+	else if(!isStatic && !strcmp(signature, "moveParts")){
+		return [](WrenVM* vm){
+			Creep* creep = wrenGetWeakPtr<Creep>(vm);
+			if(!creep)
+				return;
+			wrenEnsureSlots(vm, 1);
+			wrenSetSlotDouble(vm, 0, creep->moveParts);
 		};
 	}
 	else if(!isStatic && !strcmp(signature, "memory")){

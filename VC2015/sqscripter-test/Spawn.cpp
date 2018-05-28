@@ -11,8 +11,10 @@ extern "C"{
 const SQUserPointer Spawn::typetag = _SC("Spawn");
 SQObject Spawn::spawnClass;
 
-bool Spawn::createCreep(){
-	if(resource < creep_cost)
+bool Spawn::createCreep(int moveParts){
+	moveParts = std::max(1, std::min(Creep::max_parts, moveParts));
+	int cost = creep_cost + moveParts * move_part_cost;
+	if(resource < cost)
 		return false;
 	static const int directions[4][2] = {
 		{ 0,-1 },
@@ -25,9 +27,9 @@ bool Spawn::createCreep(){
 		RoomPosition newPos{ pos.x + directions[i][0], pos.y + directions[i][1] };
 		if(game.isBlocked(newPos))
 			continue;
-		game.creeps.push_back(Creep(newPos.x, newPos.y, owner));
+		game.creeps.push_back(Creep(newPos.x, newPos.y, owner, moveParts));
 		game.room[newPos.y][newPos.x].object = game.creeps.back().id;
-		resource -= creep_cost;
+		resource -= cost;
 		return true;
 	} while(++i < numof(directions));
 	return false;
@@ -47,7 +49,11 @@ SQInteger Spawn::sqf_createCreep(HSQUIRRELVM v)
 	Spawn *spawn = *static_cast<WeakPtr<Spawn>*>(up);
 	if(!spawn)
 		return sq_throwerror(v, _SC("Spawn object has been deleted"));
-	SQBool b = spawn->createCreep();
+	SQInteger moveParts;
+	if(SQ_FAILED(sq_getinteger(v, 2, &moveParts))){
+		moveParts = 1;
+	}
+	SQBool b = spawn->createCreep(int(moveParts));
 	sq_pushbool(v, b);
 	return 1;
 }
@@ -95,6 +101,16 @@ SQInteger Spawn::sqf_get(HSQUIRRELVM v){
 		sq_pushinteger(v, spawn->resource);
 		return 1;
 	}
+	else if(!scstrcmp(key, _SC("creep_cost"))){
+		sq_pushroottable(v);
+		sq_pushinteger(v, spawn->creep_cost);
+		return 1;
+	}
+	else if(!scstrcmp(key, _SC("move_part_cost"))){
+		sq_pushroottable(v);
+		sq_pushinteger(v, spawn->move_part_cost);
+		return 1;
+	}
 	else
 		return sq_throwerror(v, (std::basic_string<SQChar>(_SC("Couldn't find key: ")) + std::basic_string<SQChar>(key)).c_str());
 }
@@ -122,13 +138,24 @@ WrenForeignMethodFn Spawn::wren_bind(WrenVM * vm, bool isStatic, const char * si
 			wrenSetSlotDouble(vm, 0, spawn->resource);
 		};
 	}
-	else if(!isStatic && !strcmp(signature, "createCreep()")){
+	else if(!isStatic && !strcmp(signature, "createCreep(_)")){
 		return [](WrenVM* vm){
 			wxMutexLocker ml(wxGetApp().mutex);
 			Spawn* spawn = wrenGetWeakPtr<Spawn>(vm);
 			if(!spawn)
 				return;
-			wrenSetSlotBool(vm, 0, spawn->createCreep());
+			double moveParts = wrenGetSlotDouble(vm, 1);
+			wrenSetSlotBool(vm, 0, spawn->createCreep(int(moveParts)));
+		};
+	}
+	else if(isStatic && !strcmp(signature, "creep_cost")){
+		return [](WrenVM* vm){
+			wrenSetSlotDouble(vm, 0, Spawn::creep_cost);
+		};
+	}
+	else if(isStatic && !strcmp(signature, "move_part_cost")){
+		return [](WrenVM* vm){
+			wrenSetSlotDouble(vm, 0, Spawn::move_part_cost);
 		};
 	}
 	return WrenForeignMethodFn();

@@ -12,7 +12,7 @@ there is no way to communicate data between these languages.
 
 In this document, classes and its member fields and methods are described.
 The interface is the same among Squirrel and Wren, so the documentation has
-no distinction between them.
+no distinction between them, unless otherwise noted.
 
 .. toctree::
    :maxdepth: 2

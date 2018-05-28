@@ -18,10 +18,13 @@ Game.main = Fn.new {
 	for(s in Game.spawns){
 		var creepCount = Game.creeps.count {|c| c.owner == s.owner}
 		if(creepCount < 3){
-			var c = s.createCreep()
-			if(c){
-				var lastC = Game.creeps[-1]
-				Game.print("Spawn created: %(lastC.id) when resource is %(s.resource), ttl: %(lastC.ttl)\n")
+			var parts = (s.resource - Spawn.creep_cost) / Spawn.move_part_cost
+			if(0 < parts){
+				var c = s.createCreep(parts)
+				if(c){
+					var lastC = Game.creeps[-1]
+					Game.print("Spawn created: %(lastC.id) when resource is %(s.resource), ttl: %(lastC.ttl), parts: %(lastC.moveParts)\n")
+				}
 			}
 		}
 	}
@@ -87,7 +90,7 @@ Game.main = Fn.new {
 				var dist = distanceOf.call(c, m)
 				if(dist <= 1){
 					c.harvest(1)
-					Game.print("harvesting %(c.id): resource: %(c.resource), dist: %(dist)\n")
+					//Game.print("harvesting %(c.id): resource: %(c.resource), dist: %(dist)\n")
 				}else{
 					tryApproach.call(c, m)
 				}
@@ -107,7 +110,7 @@ Game.main = Fn.new {
 			var dist = distanceOf.call(c, s)
 			if(dist <= 1){
 				c.store(1)
-				Game.print("storing %(c.id): resource: %(c.resource), dist: %(dist)\n")
+				//Game.print("storing %(c.id): resource: %(c.resource), dist: %(dist)\n")
 			}else{
 				tryApproach.call(c, s)
 			}
@@ -120,7 +123,7 @@ Game.main = Fn.new {
 					var dist = distanceOf.call(c, enemies[0])
 					if(dist <= 1){
 						c.attack(1)
-						Game.print("attacking %(c.id): resource: %(c.resource), dist: %(dist)\n")
+						//Game.print("attacking %(c.id): resource: %(c.resource), dist: %(dist)\n")
 					}else{
 						tryApproach.call(c, enemies[0])
 					}

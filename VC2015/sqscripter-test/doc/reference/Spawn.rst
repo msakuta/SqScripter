@@ -18,12 +18,23 @@ A stationary structure that can produce :doc:`Creeps <Creep>` from resources.
 .. js:attribute:: Spawn.owner
 
    A number indicating the ID of the owner.
+   This is an index to :js:attr:`Game.races` array.
 
 .. js:attribute:: Spawn.resource
 
    How much resource this Spawn has. Read only.
 
-.. js:function:: Spawn.createCreep()
+.. js:attribute:: Spawn.creep_cost
+
+   The base cost of a Creep spent in createCreep, in resource units. Static constant.
+
+.. js:attribute:: Spawn.move_part_cost
+
+   The cost of move part for a Creep in createCreep, in resource units. Static constant.
+
+.. js:function:: Spawn.createCreep([moveParts])
+
+   :param moveParts: The number of move parts for the new Creep. Maximum at 20. The default is 1.
 
    Creates a Creep and place it in an adjacent tile.
    You cannot choose which direction newly created Creep will go.

@@ -13,10 +13,13 @@ function main(){
 	foreach(s in Game.spawns){
 		local creepCount = Game.creeps.filter(@(idx,creep) creep.owner == s.owner).len()
 		if(creepCount < 3){
-			local c = s.createCreep()
+			local parts = (s.resource - s.creep_cost) / s.move_part_cost
+			if(parts <= 0)
+				continue
+			local c = s.createCreep(parts)
 			if(c){
 				local lastC = Game.creeps[Game.creeps.len()-1]
-				print("Spawn created: " + lastC.id.tostring() + " when resource is " + s.resource.tostring() + ", ttl: " + lastC.ttl.tostring())
+				print("Spawn created: " + lastC.id.tostring() + " when resource is " + s.resource.tostring() + ", parts: " + lastC.moveParts.tostring() + ", " + parts.tostring())
 			}
 		}
 	}
@@ -78,7 +81,7 @@ function main(){
 				local dist = distanceOf(c, m)
 				if(dist <= 1){
 					c.harvest(1)
-					print("harvesting " + c.id.tostring() + ": resource: " + c.resource.tostring() + ", dist: " + dist)
+					//print("harvesting " + c.id.tostring() + ": resource: " + c.resource.tostring() + ", dist: " + dist)
 				}
 				else{
 					tryApproach(c, m)
@@ -96,7 +99,7 @@ function main(){
 				local dist = distanceOf(c, s)
 				if(dist <= 1){
 					c.store(1)
-					print("storing " + c.id.tostring() + ": resource: " + c.resource.tostring() + ", dist: " + dist)
+					//print("storing " + c.id.tostring() + ": resource: " + c.resource.tostring() + ", dist: " + dist)
 				}
 				else
 					tryApproach(c, s)
@@ -110,7 +113,7 @@ function main(){
 						local dist = distanceOf(c, enemy)
 						if(dist <= 1){
 							c.attack(1)
-							print("attacking " + c.id.tostring() + ": resource: " + c.resource.tostring() + ", dist: " + dist)
+							//print("attacking " + c.id.tostring() + ": resource: " + c.resource.tostring() + ", dist: " + dist)
 						}
 						else
 							tryApproach(c, enemy)

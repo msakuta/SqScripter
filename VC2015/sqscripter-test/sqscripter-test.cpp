@@ -180,7 +180,8 @@ void MainFrame::update(){
 
 		if(stc = static_cast<wxStaticText*>(GetWindowChild(ID_SELECT_RESOURCE))){
 			if(Creep* creep = dynamic_cast<Creep*>(selected)){
-				stc->SetLabelText(wxString::Format("Resource: %d / %d\nTime to Live: %d\nHealth: %d / %d", creep->resource, creep->max_resource, creep->ttl, creep->health, creep->max_health));
+				stc->SetLabelText(wxString::Format("Resource: %d / %d\nTime to Live: %d\nHealth: %d / %d\nMove Parts: %d",
+					creep->resource, creep->max_resource, creep->ttl, creep->health, creep->max_health, creep->moveParts));
 			}
 			else if(Spawn* spawn = dynamic_cast<Spawn*>(selected)){
 				stc->SetLabelText(wxString::Format("Resource: %d", spawn->resource));
@@ -813,16 +814,22 @@ int bind_wren(int argc, char *argv[])
 	"	foreign owner\n"
 	"	foreign ttl\n"
 	"	foreign resource\n"
+	"	foreign moveParts\n"
 	"	foreign memory\n"
 	"	foreign memory=(newMemory)\n"
 	"}\n"
 	"foreign class Spawn{\n"
 	"	foreign alive\n"
 	"	foreign pos\n"
-	"	foreign createCreep()\n"
+	"	createCreep(){\n"
+	"		return createCreep(1)\n"
+	"	}\n"
+	"	foreign createCreep(moveParts)\n"
 	"	foreign id\n"
 	"	foreign owner\n"
 	"	foreign resource\n"
+	"	foreign static creep_cost\n"
+	"	foreign static move_part_cost\n"
 	"}\n"
 	"foreign class Mine{\n"
 	"	foreign alive\n"

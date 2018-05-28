@@ -144,6 +144,7 @@ void Game::init(){
 		}
 	}
 
+#if 0
 	for(int i = 0; i < 6; i++){
 		int x, y;
 		do{
@@ -153,6 +154,7 @@ void Game::init(){
 		creeps.push_back(Creep(x, y, i % 2));
 		room[y][x].object = creeps.back().id;
 	}
+#endif
 
 	for(int i = 0; i < 2; i++){
 		int x, y;

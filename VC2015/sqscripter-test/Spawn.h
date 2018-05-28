@@ -14,13 +14,14 @@ struct Spawn : public RoomObject{
 	static const int max_resource = 10000;
 	static const int max_gen_resource = 100;
 	static const int creep_cost = 20;
+	static const int move_part_cost = 5;
 
 	static const SQUserPointer typetag;
 
 	Spawn(int x, int y, int owner) : RoomObject(x, y), owner(owner){}
 	const char *className()const override{ return "Spawn"; }
 
-	bool createCreep();
+	bool createCreep(int moveParts = 1);
 
 	void update();
 
