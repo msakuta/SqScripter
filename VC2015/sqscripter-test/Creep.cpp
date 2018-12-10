@@ -3,6 +3,7 @@
 #include "sqscripter-test.h"
 
 #include <vector>
+#include <array>
 #include <algorithm>
 
 
@@ -19,18 +20,50 @@ std::vector<PathNode> findPath(const RoomPosition& from, const RoomPosition& to,
 	// because the number of target positions in one iteration is orders of magnitude smaller than the total number of tiles.
 	// Also surprisingly, we don't need std::set to exclude duplicates, because the same candidate is already marked solved by assigning
 	// non-infinity cost.  If we used std::set, it would take cost in performance to build a hash table (or a binary tree or whatever).
-	std::vector<RoomPosition> targetList[2];
-	auto currentTargets = &targetList[0];
-	auto nextTargets = &targetList[1];
+	std::vector<RoomPosition> targetList;
 
-	auto internal = [&to, &self, &currentTargets, &nextTargets](){
-		int changes = 0;
-		for(auto& it : *currentTargets){
+	// Total cost estimation in A* algorithm, i.e. f = g + h.
+	// Allocating big chunk of data on the stack doesn't feel pleasant, but we know that this function won't recurse,
+	// so it should be safe.  We do this because extending the stack should be faster than allocating from heap.
+	std::array<std::array<double, ROOMSIZE>, ROOMSIZE> fScore;
+
+	// Heuristic function used in A* algorithm.  We use simple Euclidian distance.
+	static auto heuristic_cost_estimate = [](const RoomPosition& from, const RoomPosition& to){
+		return sqrt((from.x - to.x) * (from.x - to.x) + (from.y - to.y) * (from.y - to.y));
+	};
+
+	int changes = 0;
+
+	auto internal = [&to, &self, &targetList, &fScore, &changes](){
+		if(targetList.empty())
+			return 0;
+		double min_cost = HUGE_VAL;
+		//const RoomPosition* min_i = nullptr;
+		int min_i = -1;
+		for(int i = 0; i < targetList.size(); i++){
+			auto& it = targetList[i];
+			auto itcost = fScore[it.y][it.x];
+			if(itcost < min_cost){
+				min_cost = itcost;
+				min_i = i;
+			}
+		}
+/*		for(auto& it : targetList){
+			auto itcost = game.room[it.y][it.x].cost;
+			if(itcost < min_cost){
+				min_cost = itcost;
+				min_i = &it;
+			}
+		}*/
+		if(0 <= min_i){
+		//if(min_i){
+			auto& it = targetList[min_i];
+			//const RoomPosition& it = *min_i;
 			int x = it.x;
 			int y = it.y;
 			Tile &tile = game.room[y][x];
-			if(tile.cost == INT_MAX)
-				continue;
+			//if(tile.cost == INT_MAX)
+				//continue;
 			for(int y1 = std::max(y - 1, 0); y1 <= std::min(y + 1, ROOMSIZE - 1); y1++){
 				for(int x1 = std::max(x - 1, 0); x1 <= std::min(x + 1, ROOMSIZE - 1); x1++){
 					Tile &tile1 = game.room[y1][x1];
@@ -47,31 +80,37 @@ std::vector<PathNode> findPath(const RoomPosition& from, const RoomPosition& to,
 
 					if(tile1.type == 0 && tile.cost + 1 < tile1.cost){
 						tile1.cost = tile.cost + 1;
-						nextTargets->push_back(RoomPosition(x1, y1));
+						targetList.push_back(RoomPosition(x1, y1));
+						//targetList.insert(RoomPosition(x1, y1));
+						fScore[y1][x1] = tile1.cost + heuristic_cost_estimate(targetList.back(), to);
 						changes++;
 					}
 				}
 			}
+
+			// Deleting an element in a random position in a vector is not cheap in general (i.e. O(N)),
+			// but we keep the element small so that linked list would be more costly.
+			targetList.erase(targetList.begin() + min_i);
 		}
-		return changes;
+		return (int)targetList.size();
 	};
 
-	currentTargets->push_back(from);
+	targetList.push_back(from);
+	//targetList.insert(from);
 
 	for(int y = 0; y < ROOMSIZE; y++){
 		for(int x = 0; x < ROOMSIZE; x++){
 			Tile &tile = game.room[y][x];
 			tile.cost = (x == from.x && y == from.y ? 0 : INT_MAX);
+			fScore[y][x] = HUGE_VAL;
 		}
 	}
+
+	fScore[from.y][from.x] = heuristic_cost_estimate(from, to);
 
 	std::vector<PathNode> ret;
 
 	while(internal()){
-		// Swap the buffers for the next iteration.
-		// std::vector::clear() keeps the reserved buffer, which is very efficient to reuse.
-		currentTargets->clear();
-		std::swap(currentTargets, nextTargets);
 	}
 
 	Tile &destTile = game.room[to.y][to.x];
