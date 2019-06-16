@@ -159,7 +159,16 @@ MainFrame::~MainFrame()
 void MainFrame::update(){
 	wxStaticText *stc = static_cast<wxStaticText*>(GetWindowChild(ID_TIME));
 	if(stc){
-		wxString str = "Time: " + wxString::Format("%d", game.global_time) + "\n" +
+		double maxDist = []() {
+			double ret = 0.;
+			for (auto& it : game.visitList) {
+				if (ret < it.second)
+					ret = it.second;
+			}
+			return ret;
+		}();
+		wxString str = "Time: " + wxString::Format("%d", game.global_time) + wxString::Format(", visitList: %lu", (unsigned long)game.visitList.size()) +
+			wxString::Format(", maxDist: %g", maxDist) + "\n" +
 			wxString::Format("  Race 0: kills: %d, deaths: %d\n", game.races[0].kills, game.races[0].deaths) +
 			wxString::Format("  Race 1: kills: %d, deaths: %d\n", game.races[1].kills, game.races[1].deaths);
 		stc->SetLabelText(str);
@@ -216,6 +225,8 @@ void wxGLCanvasSubClass::Render()
 
 	static const GLfloat plainColor[4] = {0.5, 0.5, 0.5, 1};
 	static const GLfloat wallColor[4] = {0, 0, 0, 1};
+	static const GLfloat taggedColor[4] = { 0.75, 0.75, 0.0, 1 };
+	static const GLfloat visitColor[4] = { 0.75, 0.75, 1.0, 1 };
 	static const GLfloat creepColors[2][4] = {{0,1,1,1}, {1,0,0,1}};
 
 	glPushMatrix();
@@ -227,7 +238,9 @@ void wxGLCanvasSubClass::Render()
 	glBegin(GL_QUADS);
 	for(int i = 0; i < ROOMSIZE; i++){
 		for(int j = 0; j < ROOMSIZE; j++){
-			glColor4fv(game.room[i][j].type ? wallColor : plainColor);
+			GLfloat taggedColor[4] = { game.room[i][j].tag / 100., game.room[i][j].tag / 100., 0., 1. };
+			glColor4fv(game.visitList.find(std::array<int, 2>{j, i}) != game.visitList.end() ? visitColor :
+				game.room[i][j].tag ? taggedColor : game.room[i][j].type ? wallColor : plainColor);
 			glVertex2f(-0.5 + j, -0.5 + i);
 			glVertex2f(-0.5 + j, 0.5 + i);
 			glVertex2f(0.5 + j, 0.5 + i);
@@ -461,7 +474,7 @@ bool MyApp::OnInit()
 
 	frame->Show(TRUE);
 	app.animTimer.SetOwner(&app, 0);
-	app.animTimer.Start(100);
+	app.animTimer.Start(10);
 	return TRUE;
 }
 

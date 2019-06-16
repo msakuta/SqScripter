@@ -177,6 +177,11 @@ void Game::init(){
 	}
 }
 
+static
+Game::RoomPositionT operator+(const Game::RoomPositionT& a, const Game::RoomPositionT& b) {
+	return { a[0] + b[0], a[1] + b[1] };
+}
+
 void Game::update(){
 
 	global_time++;
@@ -224,6 +229,85 @@ void Game::update(){
 
 	for(auto& it : mines)
 		it.update();
+
+	auto& first = spawns.begin();
+	if (first != spawns.end() && room[first->pos.y][first->pos.x].tag == 0) {
+		room[first->pos.y][first->pos.x].tag = 1;
+		visitList.emplace(RoomPositionT{ first->pos.x, first->pos.y }, 0.);
+		for (auto& it : distanceMap) {
+			for (auto& it2 : it) {
+				it2 = DBL_MAX;
+			}
+		}
+		distanceMap[first->pos.y][first->pos.x] = 0.;
+	}
+	decltype(visitList) nextVisitList;
+
+	auto closest = [this]() {
+		double mini = DBL_MAX;
+		std::pair<RoomPositionT, double> ret;
+		for (auto& it : visitList) {
+			if (it.second < mini) {
+				mini = it.second;
+				ret = it;
+			}
+		}
+		visitList.erase(ret.first);
+		return ret;
+	}();
+
+	auto boundary = [](const RoomPositionT& pos) {
+		RoomPositionT ret = pos;
+		for (int i = 0; i < 2; i++) {
+			if (ret[i] < 0)
+				ret[i] = 0;
+			else if (ROOMSIZE <= ret[i])
+				ret[i] = ROOMSIZE - 1;
+		}
+		return ret;
+	};
+
+	//for (auto& it : visitList) {
+	{
+		struct Direction {
+			std::array<int, 2> dir;
+			double dist;
+		};
+		static const Direction nextDirs[] = {
+			{{-1, 0}, 1.}, {{0, -1}, 1.}, {{1, 0}, 1.}, {{0, 1}, 1.},
+			//{{-1, -1}, sqrt(2.)}, {{-1, 1}, sqrt(2.)}, {{1, 1}, sqrt(2.)}, {{1, -1}, sqrt(2.)}
+		};
+		for (auto& dir : nextDirs) {
+			auto nextPos = closest.first;
+			nextPos[0] += dir.dir[0];
+			nextPos[1] += dir.dir[1];
+			//double nextDist = closest.second + dir.dist;
+			if (0 <= nextPos[0] && nextPos[0] < ROOMSIZE && 0 <= nextPos[1] && nextPos[1] < ROOMSIZE &&
+				room[nextPos[1]][nextPos[0]].type == 0 &&
+				room[nextPos[1]][nextPos[0]].tag == 0) {
+
+				auto left = boundary(nextPos + std::array<int, 2>{-1, 0});
+				auto right = boundary(nextPos + std::array<int, 2>{1, 0});
+				auto up = boundary(nextPos + std::array<int, 2>{0, -1});
+				auto down = boundary(nextPos + std::array<int, 2>{0, 1});
+				double dx = std::min(distanceMap[left[1]][left[0]], distanceMap[right[1]][right[0]]);
+				double dy = std::min(distanceMap[up[1]][up[0]], distanceMap[down[1]][down[0]]);
+				double Delta = 2. - (dx - dy) * (dx - dy);
+				double nextDist;
+				if(Delta >= 0)
+					nextDist = (dx + dy + sqrt(Delta)) / 2;
+				else
+					nextDist = std::min(dx + 1, dy + 1);
+
+				auto prev = visitList.find(nextPos);
+				if (prev != visitList.end() && prev->second <= nextDist)
+					continue;
+				visitList.emplace(nextPos, nextDist);
+				room[nextPos[1]][nextPos[0]].tag = (int)nextDist;
+				distanceMap[nextPos[1]][nextPos[0]] = nextDist;
+			}
+		}
+	}
 
 	// Delete pass
 	for(auto it = mines.begin(); it != mines.end();){

@@ -19,6 +19,7 @@ enum Direction{
 struct Tile{
 	uint32_t type;
 	uint32_t object; ///< Object id if there is one on this tile or 0.
+	int tag = 0; ///< arbitrary tag
 	int cost; ///< Used for A* pathfinding algorithm
 };
 
