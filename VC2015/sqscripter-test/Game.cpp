@@ -241,47 +241,29 @@ void Game::update(){
 		}
 		distanceMap[first->pos.y][first->pos.x] = 0.;
 	}
-	decltype(visitList) nextVisitList;
 
-	auto closest = [this]() {
-		double mini = DBL_MAX;
-		std::pair<RoomPositionT, double> ret;
-		for (auto& it : visitList) {
-			if (it.second < mini) {
-				mini = it.second;
-				ret = it;
+	if(!visitList.empty()){
+		auto closest = visitList.top();
+		visitList.pop();
+
+		auto boundary = [](const RoomPositionT& pos) {
+			RoomPositionT ret = pos;
+			for (int i = 0; i < 2; i++) {
+				if (ret[i] < 0)
+					ret[i] = 0;
+				else if (ROOMSIZE <= ret[i])
+					ret[i] = ROOMSIZE - 1;
 			}
-		}
-		visitList.erase(ret.first);
-		return ret;
-	}();
-
-	auto boundary = [](const RoomPositionT& pos) {
-		RoomPositionT ret = pos;
-		for (int i = 0; i < 2; i++) {
-			if (ret[i] < 0)
-				ret[i] = 0;
-			else if (ROOMSIZE <= ret[i])
-				ret[i] = ROOMSIZE - 1;
-		}
-		return ret;
-	};
-
-	//for (auto& it : visitList) {
-	{
-		struct Direction {
-			std::array<int, 2> dir;
-			double dist;
+			return ret;
 		};
-		static const Direction nextDirs[] = {
-			{{-1, 0}, 1.}, {{0, -1}, 1.}, {{1, 0}, 1.}, {{0, 1}, 1.},
-			//{{-1, -1}, sqrt(2.)}, {{-1, 1}, sqrt(2.)}, {{1, 1}, sqrt(2.)}, {{1, -1}, sqrt(2.)}
+
+		static const RoomPositionT nextDirs[] = {
+			{-1, 0}, {0, -1}, {1, 0}, {0, 1},
 		};
 		for (auto& dir : nextDirs) {
-			auto nextPos = closest.first;
-			nextPos[0] += dir.dir[0];
-			nextPos[1] += dir.dir[1];
-			//double nextDist = closest.second + dir.dist;
+			auto nextPos = RoomPositionT(closest);
+			nextPos[0] += dir[0];
+			nextPos[1] += dir[1];
 			if (0 <= nextPos[0] && nextPos[0] < ROOMSIZE && 0 <= nextPos[1] && nextPos[1] < ROOMSIZE &&
 				room[nextPos[1]][nextPos[0]].type == 0 &&
 				room[nextPos[1]][nextPos[0]].tag == 0) {
@@ -299,9 +281,6 @@ void Game::update(){
 				else
 					nextDist = std::min(dx + 1, dy + 1);
 
-				auto prev = visitList.find(nextPos);
-				if (prev != visitList.end() && prev->second <= nextDist)
-					continue;
 				visitList.emplace(nextPos, nextDist);
 				room[nextPos[1]][nextPos[0]].tag = (int)nextDist;
 				distanceMap[nextPos[1]][nextPos[0]] = nextDist;

@@ -159,14 +159,7 @@ MainFrame::~MainFrame()
 void MainFrame::update(){
 	wxStaticText *stc = static_cast<wxStaticText*>(GetWindowChild(ID_TIME));
 	if(stc){
-		double maxDist = []() {
-			double ret = 0.;
-			for (auto& it : game.visitList) {
-				if (ret < it.second)
-					ret = it.second;
-			}
-			return ret;
-		}();
+		double maxDist = game.visitList.empty() ? 0. : game.visitList.top().dist;
 		wxString str = "Time: " + wxString::Format("%d", game.global_time) + wxString::Format(", visitList: %lu", (unsigned long)game.visitList.size()) +
 			wxString::Format(", maxDist: %g", maxDist) + "\n" +
 			wxString::Format("  Race 0: kills: %d, deaths: %d\n", game.races[0].kills, game.races[0].deaths) +
@@ -238,8 +231,8 @@ void wxGLCanvasSubClass::Render()
 	glBegin(GL_QUADS);
 	for(int i = 0; i < ROOMSIZE; i++){
 		for(int j = 0; j < ROOMSIZE; j++){
-			GLfloat taggedColor[4] = { game.room[i][j].tag / 100., game.room[i][j].tag / 100., 0., 1. };
-			glColor4fv(game.visitList.find(std::array<int, 2>{j, i}) != game.visitList.end() ? visitColor :
+			GLfloat taggedColor[4] = { game.distanceMap[i][j] / 100., game.distanceMap[i][j] / 100., 0., 1. };
+			glColor4fv(/*game.visitList.find(std::array<int, 2>{j, i}) != game.visitList.end() ? visitColor :*/
 				game.room[i][j].tag ? taggedColor : game.room[i][j].type ? wallColor : plainColor);
 			glVertex2f(-0.5 + j, -0.5 + i);
 			glVertex2f(-0.5 + j, 0.5 + i);
